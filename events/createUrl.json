@@ -1,0 +1,30 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /v1/urls",
+  "rawPath": "/v1/urls",
+  "rawQueryString": "",
+  "headers": {
+    "content-type": "application/json",
+    "user-agent": "Custom User Agent String"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "1234567890",
+    "domainName": "1234567890.execute-api.us-east-1.amazonaws.com",
+    "domainPrefix": "1234567890",
+    "http": {
+      "method": "POST",
+      "path": "/v1/urls",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "Custom User Agent String"
+    },
+    "requestId": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef",
+    "routeKey": "POST /v1/urls",
+    "stage": "$default",
+    "time": "09/Apr/2015:12:34:56 +0000",
+    "timeEpoch": 1428582896000
+  },
+  "body": "{\"longUrl\": \"https://example.com/some/very/long/path\"}",
+  "isBase64Encoded": false
+}

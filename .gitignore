@@ -1,0 +1,14 @@
+# IDE
+.idea/
+
+# Secrets
+.mcp.env
+.env
+
+# Build
+.aws-sam
+functions/target/
+functions/dependency-reduced-pom.xml
+
+## Private docs
+docs

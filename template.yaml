@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  tylink
+
+  Sample SAM Template for tylink
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Runtime: java21
+    Architectures:
+      - x86_64
+    Timeout: 20
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        POWERTOOLS_LOG_LEVEL: ERROR
+        POWERTOOLS_SERVICE_NAME: tylink
+
+Resources:
+  UrlTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      # GSI1 (USER#<userId> / URL#<createdAt>#<shortCode>) is added once the
+      # "list" function is built — not needed by "create" yet.
+
+  CreateUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: com.tylink.create.CreateUrlHandler::handleRequest
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref UrlTable
+      Events:
+        CreateUrl:
+          Type: HttpApi
+          Properties:
+            Path: /v1/urls
+            Method: post
+
+  DecodeUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: com.tylink.decode.DecodeUrlHandler::handleRequest
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UrlTable
+      Events:
+        DecodeUrl:
+          Type: HttpApi
+          Properties:
+            Path: /v1/urls/{shortCode}
+            Method: get
+
+Outputs:
+  # ServerlessHttpApi is the implicit HTTP API created out of the Events key
+  # under Serverless::Function (no ApiId was given above)
+  HttpApiUrl:
+    Description: "Base URL for the tylink HTTP API"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+  CreateUrlApi:
+    Description: "API Gateway endpoint URL for the create-URL route"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls"
+  DecodeUrlApi:
+    Description: "API Gateway endpoint URL for the decode-URL route"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls/{shortCode}"
+  CreateUrlFunction:
+    Description: "Create URL Lambda Function ARN"
+    Value: !GetAtt CreateUrlFunction.Arn
+  CreateUrlFunctionIamRole:
+    Description: "Implicit IAM Role created for the Create URL function"
+    Value: !GetAtt CreateUrlFunctionRole.Arn
+  DecodeUrlFunction:
+    Description: "Decode URL Lambda Function ARN"
+    Value: !GetAtt DecodeUrlFunction.Arn
+  DecodeUrlFunctionIamRole:
+    Description: "Implicit IAM Role created for the Decode URL function"
+    Value: !GetAtt DecodeUrlFunctionRole.Arn
