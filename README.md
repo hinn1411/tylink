@@ -14,6 +14,39 @@ A serverless URL shortener built with AWS SAM, Java 21, and AWS Lambda Powertool
 * [Maven](https://maven.apache.org/install.html)
 * [Docker](https://docs.docker.com/get-docker/) — required for `sam build --use-container` and `sam local ...`
 * AWS credentials configured (`aws configure`) — required for deploy/remote commands
+* [pre-commit](https://pre-commit.com/) — required for the git hooks below (`pip install pre-commit`)
+
+## Pre-commit hooks
+
+This repo uses [pre-commit](https://pre-commit.com/) to catch issues before they land in
+history. Config lives in `.pre-commit-config.yaml`. After cloning, install both hook
+stages once:
+
+```bash
+pip install pre-commit         # if not already available
+pre-commit install                        # file-hygiene checks, runs on every commit
+pre-commit install --hook-type commit-msg  # commit message format check
+```
+
+What runs on every commit (file hygiene): trailing whitespace, missing final newline,
+YAML/JSON/TOML validity, merge-conflict markers, accidentally-added large files, and
+private keys. Some of these auto-fix the file in place — if a commit fails because a
+file was modified, just `git add` the fix and commit again.
+
+What runs on the commit message: it must start with one of these types, optionally with
+a scope, followed by `: ` and a description:
+
+```
+feature: add login endpoint
+fix(decode): handle malformed short codes
+refactor(handler): simplify decode logic
+optimize: cache DynamoDB client across invocations
+test: add UrlTableIT coverage for TTL expiry
+docs: update README
+chore: bump powertools version
+```
+
+Allowed types: `feature`, `test`, `refactor`, `optimize`, `fix`, `docs`, `chore`.
 
 ## Build
 
