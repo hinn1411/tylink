@@ -13,7 +13,7 @@ A serverless URL shortener built with AWS SAM, Java 21, and AWS Lambda Powertool
 * [SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
 * [Java 21 (Corretto)](https://docs.aws.amazon.com/corretto/latest/corretto-21-ug/downloads-list.html)
 * [Maven](https://maven.apache.org/install.html)
-* [Docker](https://docs.docker.com/get-docker/) — required for `sam build --use-container` and `sam local ...`
+* [Docker](https://docs.docker.com/get-docker/) — required for `sam local ...` and integration tests
 * AWS credentials configured (`aws configure`) — required for deploy/remote commands
 * [pre-commit](https://pre-commit.com/) — required for the git hooks below (`pip install pre-commit`)
 
@@ -27,22 +27,18 @@ pre-commit install                        # file-hygiene checks, runs on every c
 pre-commit install --hook-type commit-msg  # commit message format check
 ```
 
-What runs on every commit (file hygiene): trailing whitespace, missing final newline,
-YAML/JSON/TOML validity, merge-conflict markers, accidentally-added large files, and
-private keys. Some of these auto-fix the file in place — if a commit fails because a
-file was modified, just `git add` the fix and commit again.
+File-hygiene checks (trailing whitespace, missing final newline, YAML/JSON/TOML
+validity, merge-conflict markers, large files, private keys) run on every commit
+and some auto-fix in place — if a commit fails because a file was modified, just
+`git add` the fix and commit again.
 
-What runs on the commit message: it must start with one of these types, optionally with
-a scope, followed by `: ` and a description:
+Commit messages must start with one of these types, optionally with a scope,
+followed by `: ` and a description:
 
 ```
 feature: add login endpoint
 fix(decode): handle malformed short codes
-refactor(handler): simplify decode logic
-optimize: cache DynamoDB client across invocations
-test: add UrlTableIT coverage for TTL expiry
 docs: update README
-chore: bump powertools version
 ```
 
 Allowed types: `feature`, `test`, `refactor`, `optimize`, `fix`, `docs`, `chore`.
@@ -50,32 +46,22 @@ Allowed types: `feature`, `test`, `refactor`, `optimize`, `fix`, `docs`, `chore`
 ## Build
 
 ```bash
-# Build using the local Maven/JDK toolchain (fast, default)
 sam build
-
-# Build inside a Docker container that matches the Lambda execution
-# environment exactly — use this if "it builds locally but fails on Lambda"
-sam build --use-container
-
-# Force a clean rebuild, ignoring the build cache
-sam build --no-cached
 ```
 
-Output goes to `.aws-sam/build/`.
+Output goes to `.aws-sam/build/`. Use `sam build --use-container` to build inside
+a Docker container matching the Lambda execution environment exactly (e.g. if
+"it builds locally but fails on Lambda").
 
 ## Run & invoke locally
 
 ```bash
 # Invoke a single function with a sample event (no HTTP layer involved)
 sam local invoke CreateUrlFunction --event events/createUrl.json
-sam local invoke DecodeUrlFunction --event events/decodeUrl.json
-
-# Same, but pause and wait for a debugger to attach on port 5858
-sam local invoke CreateUrlFunction --event events/createUrl.json --debug-port 5858
 
 # Start the full HTTP API locally on port 3000 (reads routes from
 # each function's `Events` block in template.yaml)
-sam local start-api --port 3000 --warm-containers EAGER
+sam local start-api --port 3000
 
 # In another shell, call the locally emulated route:
 curl -i -X POST http://localhost:3000/v1/urls \
@@ -91,82 +77,36 @@ classes are integration tests.
 ```bash
 cd functions
 
-# Unit tests — pure Java, no AWS/Docker involved (JUnit5)
-mvn test
-
-# Integration tests — spins up a real DynamoDB Local container via
-# Testcontainers and exercises the UrlTable PK/SK schema against it.
-# Requires Docker running. Runs unit tests first, then integration tests.
-mvn verify
+mvn test    # unit tests — pure Java, no AWS/Docker (JUnit5)
+mvn verify  # unit + integration tests — integration tests need Docker running
+            # (spins up DynamoDB Local via Testcontainers)
 ```
 
-`NOTE`: Testcontainers' cleanup sidecar ("Ryuk") is disabled by default via
-`functions/pom.xml` (Failsafe plugin config). Ryuk needs a real `/var/run/docker.sock`
-to bind-mount into itself, which Docker Desktop setups without that path (only the
-proxy sockets under `~/.docker/desktop/`) don't provide — without disabling it,
-`mvn verify` fails with a `Could not start container` / `404 No such container` error.
-If your environment does have a real `/var/run/docker.sock` (e.g. Docker Desktop with
-Settings → Advanced → "Allow the default Docker socket to be used" enabled, or native
-Linux Docker Engine), you can safely remove that config block to get Ryuk's crash-safety
-back.
+If `mvn verify` fails with a Testcontainers/Docker socket error, see
+`docs/technical_decisions/testcontainers-ryuk.md`.
 
 ## Deploy to AWS
 
 ```bash
-# First-ever deploy: walks through stack name, region, capabilities, etc.
-# and saves your answers to samconfig.toml
-sam deploy --guided
-
-# Subsequent deploys reuse samconfig.toml — no flags needed
-sam deploy
-
-# Non-interactive deploy (e.g. CI), skipping the changeset confirmation
-sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
-
-# Fast dev loop: watches for local changes and pushes them automatically
-sam sync --stack-name tylink --watch
+sam deploy --guided   # first-ever deploy; saves answers to samconfig.toml
+sam deploy            # subsequent deploys reuse samconfig.toml
 ```
 
-## Invoke the deployed (remote) function
+## Invoke the deployed function
 
 ```bash
-# 1. Get the live API endpoint from the stack outputs
-aws cloudformation describe-stacks \
-  --stack-name tylink \
-  --query "Stacks[0].Outputs[?OutputKey=='CreateUrlApi'].OutputValue" \
-  --output text
-
-# 2. Call it over HTTP
-curl -i -X POST "<url-from-above>" \
-  -H "Content-Type: application/json" \
-  -d '{}'
-
-# Alternative: invoke the Lambda directly, bypassing API Gateway,
-# using the same sample event used for local testing
-aws lambda invoke \
-  --function-name <CreateUrlFunction-physical-id> \
-  --cli-binary-format raw-in-base64-out \
-  --payload file://events/createUrl.json \
-  response.json && cat response.json
-
-# Alternative: let SAM resolve the function ARN from the stack for you
 sam remote invoke CreateUrlFunction --stack-name tylink --event-file events/createUrl.json
 ```
 
 ## Logs
 
 ```bash
-# Tail logs in real time
 sam logs -n CreateUrlFunction --stack-name tylink --tail
-
-# Fetch logs from a specific window
-sam logs -n CreateUrlFunction --stack-name tylink --start-time '10min ago'
 ```
 
 ## Cleanup
 
 ```bash
-# Delete the stack and all resources it created
 sam delete --stack-name tylink --no-prompts
 ```
 
