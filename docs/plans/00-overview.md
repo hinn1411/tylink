@@ -2,38 +2,36 @@
 
 ## Context
 
-This is a learning project. The goal is not just a working URL shortener — it's to use that shortener as a vehicle to learn three things in depth:
-1. The AWS serverless stack end-to-end
-2. System-design scaling concepts paired with the specific AWS configuration that implements them
-3. How to load-test a serverless system and read its behavior from CloudWatch/X-Ray under real traffic
+A URL Shortener. It includes:
+1. Implement an end-to-end Serverless system
+2. Scale the system by utilizing AWS built-in configuration
+3. Verify & monitor system behavior under high traffic
 
 The project is split into 3 phases, documented one file per phase in this `plans/` folder:
-- `01-phase1-build.md` — build the functional service
+- `01-imp.md` — build the functional service
 - `02-phase2-scaling.md` — research, scale, and resolve challenges
 - `03-phase3-load-testing.md` — test and verify at scale
 - `04-cicd-and-iac.md` — CI/CD pipeline shape and the SAM-vs-CDK decision
 - `05-references.md` — reference docs and reading list
 
-Implement each phase yourself, gradually, at your own pace — these documents are the map, not a script to run.
-
 ## Decisions Already Made
 
-- **No custom domain in Phase 1.** Skip Route 53 domain registration for now; use CloudFront's default `*.cloudfront.net` domain in front of API Gateway. A branded domain is a documented later add-on (section below), not a blocker.
-- **Stay near AWS Free Tier by default.** DAX, WAF, and the AWS Distributed Load Testing solution's Fargate tasks all cost real money even at rest or per run. These are marked **Optional/Deferred** below — understood conceptually and available to switch on briefly for a bounded experiment, but not part of the default build. An **AWS Budgets alert** (~$15–20/mo) is a Phase 1 deliverable, not an afterthought.
-- **Java build tool: Maven** — matches AWS's own SAM/Lambda Powertools examples most closely, easiest to follow official docs with.
+- **No custom domain** Add Route53 domain later
+- **Utilize AWS Free Tier feature** DAX, WAF, and AWS Distributed Load Testing cost real money. These are marked **Optional/Deferred**. We will try them later
+- **Budget** 15-20$/month
 
 ---
 
 ## Original Functional Requirements (as given)
 
-**Authentication & Authorization** (Cognito):
+**Authentication & Authorization**:
 - Log in by username and password
 - Log in by Google
 
 **Core features**:
 - Encode a long URL into a shortened version
 - Decode/restore shortened URL to original URL
-- Add an expiration time for the encoded URL (bonus)
+- Add an expiration time for the encoded URL (Optional)
 
 **Management features**:
 - Get all created URLs of a user
@@ -44,22 +42,22 @@ Implement each phase yourself, gradually, at your own pace — these documents a
 
 | # | Requirement | Why it's needed beyond the original list |
 |---|---|---|
-| F1 | ~~Custom/branded domain~~ **(deferred)** — use CloudFront's default `*.cloudfront.net` domain now (still free-tier eligible, no Route 53 cost), add Route 53 + ACM custom domain later as a drop-in swap | Keeps the door open to add branding later without re-architecting anything |
-| F2 | **Redirect uses HTTP 302 (or 307), never 301** | 301 is cached permanently by browsers themselves — it will silently break your own Update/Delete/Expire features the first time a client caches it |
+| F1 | ~~Custom domain~~ **(deferred)** — use CloudFront domain now. add Route 53 + ACM custom domain later | Keeps the door open to add branding later without re-architecting anything |
+| F2 | **Redirect uses HTTP 302 (or 307), never 301** | 301 is cached permanently by browsers — it will silently break your own Update/Delete/Expire features the first time a client caches it |
 | F3 | **Pagination on "list all URLs of a user"** | A DynamoDB `Query` naturally paginates via `LastEvaluatedKey`; the API must expose a cursor/next-token, not assume a small fixed page |
 | F4 | **Idempotent create endpoint** (client-supplied `Idempotency-Key` header) | Client retries on a flaky connection must not silently create duplicate short links |
 | F5 | **Idempotent delete + distinct 410 vs 404 semantics** | Deleting an already-deleted resource should succeed, not error; "gone" vs "never existed" matters once caching is introduced |
 | F6 | **Basic abuse protection on create** (simple rate limit + optional domain blocklist) | A public "accept any long URL" endpoint is a classic phishing/spam vector |
-| F7 | **API versioning** (`/v1/...`) | Cheap now, expensive to retrofit |
+| F7 | **API versioning** | Cheap now, expensive to retrofit |
 
 ## Additional Non-Functional Requirements
 
 | # | Requirement | Justification |
 |---|---|---|
-| N1 | **Explicit latency SLOs** (e.g. redirect p99 < 100ms server-side, CRUD p99 < 300ms) | Gives Phase 3 load-test results a pass/fail meaning instead of just numbers |
+| N1 | **Explicit latency SLOs** (e.g. redirect p99 < 500ms server-side, CRUD p99 < 500ms) | Gives Phase 3 load-test results a pass/fail meaning instead of just numbers |
 | N2 | **Explicit availability target** (e.g. 99.9%) | Anchor for later discussing "what would get us to 99.99%" (Global Tables) without building it |
 | N3 | **Least-privilege IAM per Lambda** — one execution role per function, scoped to only what it touches | The 5 Phase 1 Lambdas (plus a 6th async cleanup function added in Phase 2) have very different blast radii (create vs delete vs redirect); a compromised redirect function shouldn't be able to delete data |
-| N4 | **Business logic decoupled from the AWS SDK behind a repository interface** | The prerequisite for meaningfully unit-testing a Java Lambda handler — without this boundary, "unit test" degenerates into mocking the DynamoDB SDK client directly |
+| N4 | **Decouple business logic from AWS infrastructure** | The prerequisite for meaningfully unit-testing a Java Lambda handler — without this boundary, "unit test" degenerates into mocking the DynamoDB SDK client directly |
 | N5 | **Cost guardrail**: AWS Budgets + SNS alert (~$15–20/mo) | Personal project; DAX/CloudFront/provisioned concurrency/a runaway retry loop can produce a surprise bill |
 | N6 | **Observability SLO** (e.g. mean-time-to-detect < 5 min via CloudWatch Alarms) | Turns "add monitoring" into a testable requirement |
 
