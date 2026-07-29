@@ -6,6 +6,7 @@ A serverless URL shortener built with AWS SAM, Java 21, and AWS Lambda Powertool
 - `events/` — sample invocation payloads for local testing (`createUrl.json`, `decodeUrl.json`).
 - `template.yaml` — SAM template defining the application's AWS resources (Lambda functions, DynamoDB table, HTTP API).
 - `samconfig.toml` — saved CLI defaults (stack name `tylink`, `CAPABILITY_IAM`, etc.) so most commands below need no extra flags.
+- `docs/` — project plans (`plans/`), technical-decision records (`technical_decisions/`), and learning notes (`learning/`). Start at `docs/plans/00-overview.md` for full project context.
 
 ## Prerequisites
 
@@ -18,9 +19,7 @@ A serverless URL shortener built with AWS SAM, Java 21, and AWS Lambda Powertool
 
 ## Pre-commit hooks
 
-This repo uses [pre-commit](https://pre-commit.com/) to catch issues before they land in
-history. Config lives in `.pre-commit-config.yaml`. After cloning, install both hook
-stages once:
+Config lives in `.pre-commit-config.yaml`. After cloning, install both hook stages once:
 
 ```bash
 pip install pre-commit         # if not already available
