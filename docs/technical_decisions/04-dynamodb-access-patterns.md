@@ -67,3 +67,30 @@ item's position in GSI1's sort order mid-pagination.
 
 No second GSI. Privacy is attribute + app logic, not key design. Updates
 never change `shortCode` or `createdAt`.
+
+## Conclusion
+
+One table, one item type, one GSI. Every attribute below lives on the same
+item (`PK=URL#<shortCode>`, `SK=METADATA`) — nothing here is split across
+item types or a second index:
+
+```
+PK          URL#<shortCode>              — identity, redirect lookup key
+SK          METADATA                     — fixed literal, room for future item types
+GSI1PK      USER#<userId>                — list-by-user partition key
+GSI1SK      URL#<createdAt>#<shortCode>  — chronological order + tiebreaker
+longUrl     string                       — the only field `update` touches
+ownerId     USER#<userId>                — private-decode ownership check
+visibility  PUBLIC | PRIVATE             — gates the ownership check
+status      ACTIVE | DELETED             — soft delete
+createdAt   ISO-8601, set once           — never changes, incl. on update
+expiresAt   ISO-8601, optional           — TTL attribute + explicit read-time check
+deletedAt   ISO-8601                     — set on soft delete
+purgeAt     epoch seconds, optional      — cleanup horizon for soft-deleted items
+```
+
+All four access patterns resolve against this one shape: redirect and
+private decode are the same `GetItem` on `(PK, SK)`; list is a `Query` on
+`GSI1PK`; update is an `UpdateItem` that only ever touches `longUrl`
+(and `expiresAt`, if made editable). No access pattern required a second
+GSI or a second item type.
