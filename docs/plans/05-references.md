@@ -24,4 +24,4 @@
 - Alex Xu, *System Design Interview* (Vol. 1) — the canonical URL-shortener chapter this project's requirements mirror
 - Martin Kleppmann, *Designing Data-Intensive Applications* — theory of partitioning, hot keys, caching, idempotency (not AWS-specific, but the conceptual backbone for the Phase 2 deep dive)
 - AWS Well-Architected Framework, Reliability & Performance Efficiency pillars: https://aws.amazon.com/architecture/well-architected/
-- `../learning/system-design-concepts.md` — beginner-friendly recap of the system-design concepts behind this project's decisions, mapped to specific DDIA chapters/pages
+- `../learning/01-system-design-concepts.md` — beginner-friendly recap of the system-design concepts behind this project's decisions, mapped to specific DDIA chapters/pages

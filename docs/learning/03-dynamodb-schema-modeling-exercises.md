@@ -1,7 +1,7 @@
 # DynamoDB Schema Modeling Exercises
 
 Practice turning access patterns into keys and indexes, on small generic scenarios,
-before designing TyLink's own table. Read `dynamodb-single-table-design.md` first if
+before designing TyLink's own table. Read `02-dynamodb-single-table-design.md` first if
 any of the terms below (PK/SK, LSI, GSI, adjacency list) are unfamiliar.
 
 For each exercise: read the scenario and access patterns, then write down your own
@@ -191,7 +191,7 @@ Two ways to serve pattern 2:
 
 None of these is "index overloading" by itself — that term specifically means
 reusing the *same* GSI's key slots across other, unrelated entity types elsewhere in
-the table (see `dynamodb-single-table-design.md` #5 for a worked example). Using one
+the table (see `02-dynamodb-single-table-design.md` #5 for a worked example). Using one
 GSI to reverse one relationship is just... using a GSI.
 </details>
 
@@ -248,7 +248,7 @@ separately marked overdue ahead of time.
 
 **Gotcha**: `STATUS#OUT` is a low-cardinality partition key — every outstanding
 checkout in the entire library lands in that one GSI partition, the same hot-key
-problem as `system-design-concepts.md` (#2/#3), just relocated onto a GSI instead of
+problem as `01-system-design-concepts.md` (#2/#3), just relocated onto a GSI instead of
 the base table. Two fixes:
 - **Shard the GSI key**: `GSI_PK = STATUS#OUT#<0-9>` (hash the checkout ID into a
   fixed number of buckets), query all shards in parallel, merge client-side.

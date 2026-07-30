@@ -83,7 +83,7 @@ mvn verify  # unit + integration tests — integration tests need Docker running
 ```
 
 If `mvn verify` fails with a Testcontainers/Docker socket error, see
-`docs/technical_decisions/testcontainers-ryuk.md`.
+`docs/technical_decisions/03-testcontainers-ryuk.md`.
 
 ## Deploy to AWS
 

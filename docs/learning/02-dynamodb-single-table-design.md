@@ -34,13 +34,13 @@ not `42`, else `"9"` sorts after `"10"`). (TyLink: base table's partition key is
 
 - LSI's 10 GB limit is shared, not per-index — base table + all LSIs combined, per partition key value —
   so an unbounded-growth key hits it regardless of which LSI you add.
-- A GSI doesn't remove hot-partition risk, it relocates it (`system-design-concepts.md` #2/#3) — a
+- A GSI doesn't remove hot-partition risk, it relocates it (`01-system-design-concepts.md` #2/#3) — a
   low-cardinality GSI key still funnels everything into one partition.
 - GSI projection: `ALL` (every attribute, costs more) vs. `KEYS_ONLY`/`INCLUDE` (cheaper, may need a
   follow-up `GetItem`).
 
 (TyLink: GSI1 needs its own partition key, hence a GSI; its eventual consistency is why
-`system-design-concepts.md` #4/#5 flags `TransactWriteItems` for read-your-writes.)
+`01-system-design-concepts.md` #4/#5 flags `TransactWriteItems` for read-your-writes.)
 
 ## 4. Adjacency list pattern
 
@@ -78,7 +78,7 @@ types.
 List every query the app must answer before designing the schema, then shape keys/indexes to fit that
 list — the opposite of relational design, which normalizes first and expects new joins to just work
 later. (TyLink: base table and GSI1 exist because those were the known access patterns, not a "natural"
-model — `system-design-concepts.md` #11.)
+model — `01-system-design-concepts.md` #11.)
 
 ## 7. The article's design process
 
@@ -105,5 +105,5 @@ adding a new join in a normalized schema.
 
 ---
 
-See `../plans/05-references.md` for this and other reference links, and `system-design-concepts.md` for
+See `../plans/05-references.md` for this and other reference links, and `01-system-design-concepts.md` for
 the broader system-design vocabulary behind TyLink's design decisions.

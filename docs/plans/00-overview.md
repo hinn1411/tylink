@@ -49,6 +49,7 @@ The project is split into 3 phases, documented one file per phase in this `plans
 | F5 | **Idempotent delete + distinct 410 vs 404 semantics** | Deleting an already-deleted resource should succeed, not error; "gone" vs "never existed" matters once caching is introduced |
 | F6 | **Basic abuse protection on create** (simple rate limit + optional domain blocklist) | A public "accept any long URL" endpoint is a classic phishing/spam vector |
 | F7 | **API versioning** | Cheap now, expensive to retrofit |
+| F8 | **Private URL visibility** — a link can be created as owner-only; a non-owner (or anonymous caller) who probes the correct short code gets 404, never the destination | Supports personal/internal links (e.g. a private doc or dashboard) without bolting on a separate access-control system later |
 
 ## Additional Non-Functional Requirements
 
