@@ -12,6 +12,10 @@
         <powertools.version>2.10.0</powertools.version>
         <aspectj.version>1.9.22</aspectj.version>
         <junit.version>5.13.4</junit.version>
+        <jackson.version>2.21.1</jackson.version>
+        <mockito.version>5.14.2</mockito.version>
+        <java-jwt.version>4.4.0</java-jwt.version>
+        <jwks-rsa.version>0.22.1</jwks-rsa.version>
         <awssdk.bom.version>2.42.15</awssdk.bom.version>
         <testcontainers.bom.version>1.21.3</testcontainers.bom.version>
     </properties>
@@ -56,6 +60,27 @@
           <artifactId>aspectjrt</artifactId>
           <version>${aspectj.version}</version>
         </dependency>
+        <dependency>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+          <version>${jackson.version}</version>
+        </dependency>
+        <!-- Used by CreateUrlHandler (PutItem) as well as the integration test below -->
+        <dependency>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>dynamodb</artifactId>
+        </dependency>
+        <!-- Used by OptionalJwtAuthorizerHandler to verify Cognito-issued tokens against the User Pool's JWKS -->
+        <dependency>
+          <groupId>com.auth0</groupId>
+          <artifactId>java-jwt</artifactId>
+          <version>${java-jwt.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>com.auth0</groupId>
+          <artifactId>jwks-rsa</artifactId>
+          <version>${jwks-rsa.version}</version>
+        </dependency>
 
         <!-- Unit tests -->
         <dependency>
@@ -64,14 +89,15 @@
           <version>${junit.version}</version>
           <scope>test</scope>
         </dependency>
+        <dependency>
+          <groupId>org.mockito</groupId>
+          <artifactId>mockito-core</artifactId>
+          <version>${mockito.version}</version>
+          <scope>test</scope>
+        </dependency>
 
         <!-- Integration tests: real DynamoDB Local running in a Testcontainers-managed
              Docker container, exercised through the real AWS SDK v2 DynamoDB client -->
-        <dependency>
-          <groupId>software.amazon.awssdk</groupId>
-          <artifactId>dynamodb</artifactId>
-          <scope>test</scope>
-        </dependency>
         <dependency>
           <groupId>org.testcontainers</groupId>
           <artifactId>junit-jupiter</artifactId>
@@ -132,29 +158,44 @@
           <artifactId>maven-surefire-plugin</artifactId>
           <version>3.2.5</version>
         </plugin>
-        <!-- Integration tests (*IT.java): runs on `mvn verify` (needs Docker for Testcontainers) -->
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-failsafe-plugin</artifactId>
-          <version>3.2.5</version>
-          <configuration>
-            <!-- This environment's Docker Desktop has no real /var/run/docker.sock, which
-                 Ryuk (Testcontainers' cleanup sidecar) needs to bind-mount into itself.
-                 Without this it crashes on startup and looks like a container-not-found
-                 error. Safe to disable for a local dev/CI run of this test suite. -->
-            <environmentVariables>
-              <TESTCONTAINERS_RYUK_DISABLED>true</TESTCONTAINERS_RYUK_DISABLED>
-            </environmentVariables>
-          </configuration>
-          <executions>
-            <execution>
-              <goals>
-                <goal>integration-test</goal>
-                <goal>verify</goal>
-              </goals>
-            </execution>
-          </executions>
-        </plugin>
       </plugins>
     </build>
+
+    <!-- Integration tests (*IT.java) are opt-in via `-Pintegration-test`, not part of the
+         default lifecycle: they need a Docker daemon for Testcontainers, which isn't available
+         inside the containerized SAM build (Docker-in-Docker). Keeping them out of
+         `mvn clean install`/`sam build` means the Lambda artifact build never depends on Docker;
+         run `mvn verify -Pintegration-test` explicitly (locally, or as its own CI stage with a
+         sibling Docker daemon) to exercise them. -->
+    <profiles>
+      <profile>
+        <id>integration-test</id>
+        <build>
+          <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-failsafe-plugin</artifactId>
+              <version>3.2.5</version>
+              <configuration>
+                <!-- This environment's Docker Desktop has no real /var/run/docker.sock, which
+                     Ryuk (Testcontainers' cleanup sidecar) needs to bind-mount into itself.
+                     Without this it crashes on startup and looks like a container-not-found
+                     error. Safe to disable for a local dev/CI run of this test suite. -->
+                <environmentVariables>
+                  <TESTCONTAINERS_RYUK_DISABLED>true</TESTCONTAINERS_RYUK_DISABLED>
+                </environmentVariables>
+              </configuration>
+              <executions>
+                <execution>
+                  <goals>
+                    <goal>integration-test</goal>
+                    <goal>verify</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </build>
+      </profile>
+    </profiles>
 </project>

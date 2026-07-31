@@ -16,10 +16,72 @@ Globals:
     Tracing: Active
     Environment:
       Variables:
-        POWERTOOLS_LOG_LEVEL: ERROR
+        POWERTOOLS_LOG_LEVEL: INFO
         POWERTOOLS_SERVICE_NAME: tylink
 
 Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-users"
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireUppercase: true
+          RequireSymbols: false
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub "${AWS::StackName}-client"
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  OptionalJwtAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: com.tylink.auth.OptionalJwtAuthorizerHandler::handleRequest
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref UserPool
+          USER_POOL_CLIENT_ID: !Ref UserPoolClient
+
+  # Explicit HTTP API (rather than the implicit one SAM would otherwise create from the
+  # functions' Events blocks) so routes can opt into the custom authorizer below. Every
+  # HttpApi event must reference ApiId: !Ref HttpApi, or SAM implicitly creates a second,
+  # separate API for whichever routes omit it.
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth:
+        Authorizers:
+          # REQUEST-type Lambda authorizer, not a native JWT authorizer: it never denies a
+          # request (isAuthorized is always true), so routes behind it stay reachable by
+          # anonymous callers — something a native JWT authorizer can't express (it's
+          # all-or-nothing per route). When the Authorization header carries a valid Cognito
+          # token, OptionalJwtAuthorizerFunction verifies it and passes the caller's id
+          # through as `ownerId` in the authorizer context; downstream handlers read that
+          # via requestContext.authorizer.lambda, never a raw JWT. See
+          # docs/technical_decisions/04-dynamodb-access-patterns.md.
+          OptionalJwtAuthorizer:
+            FunctionArn: !GetAtt OptionalJwtAuthorizerFunction.Arn
+            AuthorizerPayloadFormatVersion: "2.0"
+            EnableSimpleResponses: true
+            Identity:
+              Headers:
+                - Authorization
+
   UrlTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -29,19 +91,36 @@ Resources:
           AttributeType: S
         - AttributeName: SK
           AttributeType: S
+        - AttributeName: GSI1_PK
+          AttributeType: S
+        - AttributeName: GSI1_SK
+          AttributeType: S
       KeySchema:
         - AttributeName: PK
           KeyType: HASH
         - AttributeName: SK
           KeyType: RANGE
-      # GSI1 (USER#<userId> / URL#<createdAt>#<shortCode>) is added once the
-      # "list" function is built — not needed by "create" yet.
+      # GSI1_PK=USER#<userId> / GSI1_SK=URL#<createdAt>#<shortCode> — every item
+      # CreateUrlFunction writes already carries these, for the future "list a
+      # user's URLs" access pattern (see docs/technical_decisions/04-dynamodb-access-patterns.md).
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1_PK
+              KeyType: HASH
+            - AttributeName: GSI1_SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
 
   CreateUrlFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/
       Handler: com.tylink.create.CreateUrlHandler::handleRequest
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref UrlTable
       Policies:
         - DynamoDBWritePolicy:
             TableName: !Ref UrlTable
@@ -49,8 +128,11 @@ Resources:
         CreateUrl:
           Type: HttpApi
           Properties:
+            ApiId: !Ref HttpApi
             Path: /v1/urls
             Method: post
+            Auth:
+              Authorizer: OptionalJwtAuthorizer
 
   DecodeUrlFunction:
     Type: AWS::Serverless::Function
@@ -64,21 +146,20 @@ Resources:
         DecodeUrl:
           Type: HttpApi
           Properties:
+            ApiId: !Ref HttpApi
             Path: /v1/urls/{shortCode}
             Method: get
 
 Outputs:
-  # ServerlessHttpApi is the implicit HTTP API created out of the Events key
-  # under Serverless::Function (no ApiId was given above)
   HttpApiUrl:
     Description: "Base URL for the tylink HTTP API"
-    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
   CreateUrlApi:
     Description: "API Gateway endpoint URL for the create-URL route"
-    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls"
   DecodeUrlApi:
     Description: "API Gateway endpoint URL for the decode-URL route"
-    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls/{shortCode}"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls/{shortCode}"
   CreateUrlFunction:
     Description: "Create URL Lambda Function ARN"
     Value: !GetAtt CreateUrlFunction.Arn
@@ -91,3 +172,12 @@ Outputs:
   DecodeUrlFunctionIamRole:
     Description: "Implicit IAM Role created for the Decode URL function"
     Value: !GetAtt DecodeUrlFunctionRole.Arn
+  OptionalJwtAuthorizerFunction:
+    Description: "Optional-JWT Authorizer Lambda Function ARN"
+    Value: !GetAtt OptionalJwtAuthorizerFunction.Arn
+  UserPoolId:
+    Description: "Cognito User Pool ID"
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Description: "Cognito User Pool App Client ID"
+    Value: !Ref UserPoolClient
