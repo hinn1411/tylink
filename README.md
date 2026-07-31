@@ -3,7 +3,7 @@
 A serverless URL shortener built with AWS SAM, Java 21, and AWS Lambda Powertools.
 
 - `functions/` — Maven module with all Lambda handler source (`src/main/java`) and unit tests (`src/test/java`).
-- `events/` — sample invocation payloads for local testing (`createUrl.json`, `decodeUrl.json`).
+- `events/` — sample invocation payloads for local testing (`createUrlPublic.authenticated.json`, `createPrivateUrl.json`, `createPublicUrl.json`, `createPrivateUrl.invalidToken.json`, `decodeUrl.json`).
 - `template.yaml` — SAM template defining the application's AWS resources (Lambda functions, DynamoDB table, HTTP API).
 - `samconfig.toml` — saved CLI defaults (stack name `tylink`, `CAPABILITY_IAM`, etc.) so most commands below need no extra flags.
 - `docs/` — project plans (`plans/`), technical-decision records (`technical_decisions/`), and learning notes (`learning/`). Start at `docs/plans/00-overview.md` for full project context.
@@ -57,7 +57,7 @@ a Docker container matching the Lambda execution environment exactly (e.g. if
 
 ```bash
 # Invoke a single function with a sample event (no HTTP layer involved)
-sam local invoke CreateUrlFunction --event events/createUrl.json
+sam local invoke CreateUrlFunction --event events/createUrlPublic.authenticated.json
 
 # Start the full HTTP API locally on port 3000 (reads routes from
 # each function's `Events` block in template.yaml)
@@ -77,13 +77,15 @@ classes are integration tests.
 ```bash
 cd functions
 
-mvn test    # unit tests — pure Java, no AWS/Docker (JUnit5)
-mvn verify  # unit + integration tests — integration tests need Docker running
-            # (spins up DynamoDB Local via Testcontainers)
+mvn test                            # unit tests — pure Java, no AWS/Docker (JUnit5)
+mvn verify -Pintegration-test       # unit + integration tests — needs Docker running
+                                     # (spins up DynamoDB Local via Testcontainers)
 ```
 
-If `mvn verify` fails with a Testcontainers/Docker socket error, see
-`docs/technical_decisions/03-testcontainers-ryuk.md`.
+If `mvn verify -Pintegration-test` fails with a Testcontainers/Docker socket error, see
+`docs/technical_decisions/03-testcontainers-ryuk.md`. Integration tests are opt-in (see
+`docs/technical_decisions/06-integration-tests-as-profile.md`) since `sam build`'s containerized
+mode can't reach Docker for them.
 
 ## Deploy to AWS
 
@@ -95,7 +97,7 @@ sam deploy            # subsequent deploys reuse samconfig.toml
 ## Invoke the deployed function
 
 ```bash
-sam remote invoke CreateUrlFunction --stack-name tylink --event-file events/createUrl.json
+sam remote invoke CreateUrlFunction --stack-name tylink --event-file events/createUrlPublic.authenticated.json
 ```
 
 ## Logs
