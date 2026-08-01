@@ -11,7 +11,7 @@ public final class AuthUtils {
     }
 
     /**
-     * ownerId is the userId OptionalJwtAuthorizerHandler puts in the authorizer context —
+     * ownerId is the userId ExtractTokenAuthorizerHandler puts in the authorizer context —
      * present only when the caller sent a valid Cognito token, empty for anonymous callers.
      */
     public static Optional<String> extractOwnerId(APIGatewayV2HTTPEvent input) {

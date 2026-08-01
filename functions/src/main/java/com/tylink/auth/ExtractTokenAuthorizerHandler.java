@@ -17,20 +17,20 @@ import java.util.Optional;
  * {@code sub} is passed through as {@code ownerId} in the authorizer context; otherwise the
  * context is empty and downstream handlers treat the caller as anonymous.
  */
-public class OptionalJwtAuthorizerHandler implements RequestHandler<APIGatewayV2CustomAuthorizerEvent, Map<String, Object>> {
+public class ExtractTokenAuthorizerHandler implements RequestHandler<APIGatewayV2CustomAuthorizerEvent, Map<String, Object>> {
 
-    private static final Logger log = LogManager.getLogger(OptionalJwtAuthorizerHandler.class);
+    private static final Logger log = LogManager.getLogger(ExtractTokenAuthorizerHandler.class);
 
     private final CognitoJwtVerifier verifier;
 
-    public OptionalJwtAuthorizerHandler() {
+    public ExtractTokenAuthorizerHandler() {
         this(new CognitoJwtVerifier(
                 System.getenv("AWS_REGION"),
                 System.getenv("USER_POOL_ID"),
                 System.getenv("USER_POOL_CLIENT_ID")));
     }
 
-    OptionalJwtAuthorizerHandler(CognitoJwtVerifier verifier) {
+    ExtractTokenAuthorizerHandler(CognitoJwtVerifier verifier) {
         this.verifier = verifier;
     }
 

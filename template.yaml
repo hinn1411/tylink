@@ -47,11 +47,11 @@ Resources:
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
 
-  OptionalJwtAuthorizerFunction:
+  ExtractTokenAuthorizerFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/
-      Handler: com.tylink.auth.OptionalJwtAuthorizerHandler::handleRequest
+      Handler: com.tylink.auth.ExtractTokenAuthorizerHandler::handleRequest
       Environment:
         Variables:
           USER_POOL_ID: !Ref UserPool
@@ -70,12 +70,12 @@ Resources:
           # request (isAuthorized is always true), so routes behind it stay reachable by
           # anonymous callers — something a native JWT authorizer can't express (it's
           # all-or-nothing per route). When the Authorization header carries a valid Cognito
-          # token, OptionalJwtAuthorizerFunction verifies it and passes the caller's id
+          # token, ExtractTokenAuthorizerFunction verifies it and passes the caller's id
           # through as `ownerId` in the authorizer context; downstream handlers read that
           # via requestContext.authorizer.lambda, never a raw JWT. See
           # docs/technical_decisions/04-dynamodb-access-patterns.md.
-          OptionalJwtAuthorizer:
-            FunctionArn: !GetAtt OptionalJwtAuthorizerFunction.Arn
+          ExtractTokenAuthorizer:
+            FunctionArn: !GetAtt ExtractTokenAuthorizerFunction.Arn
             AuthorizerPayloadFormatVersion: "2.0"
             EnableSimpleResponses: true
             Identity:
@@ -129,7 +129,7 @@ Resources:
             Path: /v1/urls
             Method: post
             Auth:
-              Authorizer: OptionalJwtAuthorizer
+              Authorizer: ExtractTokenAuthorizer
 
   DecodeUrlFunction:
     Type: AWS::Serverless::Function
@@ -169,9 +169,9 @@ Outputs:
   DecodeUrlFunctionIamRole:
     Description: "Implicit IAM Role created for the Decode URL function"
     Value: !GetAtt DecodeUrlFunctionRole.Arn
-  OptionalJwtAuthorizerFunction:
-    Description: "Optional-JWT Authorizer Lambda Function ARN"
-    Value: !GetAtt OptionalJwtAuthorizerFunction.Arn
+  ExtractTokenAuthorizerFunction:
+    Description: "Extract-Token Authorizer Lambda Function ARN"
+    Value: !GetAtt ExtractTokenAuthorizerFunction.Arn
   UserPoolId:
     Description: "Cognito User Pool ID"
     Value: !Ref UserPool

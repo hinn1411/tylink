@@ -23,8 +23,8 @@ class ShortenUrlHandlerTest {
     private static final String TABLE_NAME = "UrlTable";
 
     /**
-     * Mimics what OptionalJwtAuthorizerHandler actually returns as its authorizer context after
-     * verifying a token — see com.tylink.auth.OptionalJwtAuthorizerHandler.
+     * Mimics what ExtractTokenAuthorizerHandler actually returns as its authorizer context after
+     * verifying a token — see com.tylink.auth.ExtractTokenAuthorizerHandler.
      */
     private APIGatewayV2HTTPEvent eventWithOwnerId(String body, String ownerId) {
         APIGatewayV2HTTPEvent.RequestContext.Authorizer authorizer =

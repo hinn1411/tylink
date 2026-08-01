@@ -1,6 +1,6 @@
-# Cognito Features Behind the Optional Lambda Authorizer
+# Cognito Features Behind the Extract-Token Lambda Authorizer
 
-Which Cognito pieces `OptionalJwtAuthorizerFunction` depends on, and how `template.yaml` wires them
+Which Cognito pieces `ExtractTokenAuthorizerFunction` depends on, and how `template.yaml` wires them
 together. See `../technical_decisions/05-custom-jwt-authorizer.md` for *why* the authorizer exists.
 
 ---
@@ -65,11 +65,11 @@ fetched once and cached:
 ## 5. Wiring in `template.yaml`
 
 ```
-UserPool ──► UserPoolClient ──► OptionalJwtAuthorizerFunction (env vars: USER_POOL_ID, USER_POOL_CLIENT_ID)
+UserPool ──► UserPoolClient ──► ExtractTokenAuthorizerFunction (env vars: USER_POOL_ID, USER_POOL_CLIENT_ID)
                                             │ FunctionArn
                                             ▼
-                          HttpApi.Auth.Authorizers.OptionalJwtAuthorizer
-                                            │ Auth.Authorizer: OptionalJwtAuthorizer
+                          HttpApi.Auth.Authorizers.ExtractTokenAuthorizer
+                                            │ Auth.Authorizer: ExtractTokenAuthorizer
                                             ▼
                                 ShortenUrlFunction's HttpApi Event (POST /v1/urls)
 ```
@@ -78,7 +78,7 @@ UserPool ──► UserPoolClient ──► OptionalJwtAuthorizerFunction (env v
   "2.0"` + `EnableSimpleResponses: true`, which is what lets it return the terse
   `{isAuthorized, context}` shape instead of a full IAM policy document.
 - `ShortenUrlFunction`'s event is the only route that opts in (`Auth.Authorizer:
-  OptionalJwtAuthorizer`) — it's a per-route reference, not an API-wide default.
+  ExtractTokenAuthorizer`) — it's a per-route reference, not an API-wide default.
   `DecodeUrlFunction`'s event has no `Auth` block, so it runs fully open with no authorizer.
 - At request time API Gateway invokes the authorizer first, then — because `isAuthorized` is always
   `true` — always proceeds to `ShortenUrlFunction`, injecting the authorizer's `context` map at
@@ -89,7 +89,7 @@ UserPool ──► UserPoolClient ──► OptionalJwtAuthorizerFunction (env v
 
 ```mermaid
 flowchart TD
-    subgraph Authorizer["API Gateway / OptionalJwtAuthorizerFunction"]
+    subgraph Authorizer["API Gateway / ExtractTokenAuthorizerFunction"]
         direction TB
         g1["1. Invoked with Authorization header (if any)"]
         g2{"2. Signing key for token's kid<br/>already cached?"}
