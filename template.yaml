@@ -110,11 +110,11 @@ Resources:
           Projection:
             ProjectionType: ALL
 
-  CreateUrlFunction:
+  ShortenUrlFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/
-      Handler: com.tylink.create.CreateUrlHandler::handleRequest
+      Handler: com.tylink.shorten.ShortenUrlHandler::handleRequest
       Environment:
         Variables:
           TABLE_NAME: !Ref UrlTable
@@ -122,7 +122,7 @@ Resources:
         - DynamoDBWritePolicy:
             TableName: !Ref UrlTable
       Events:
-        CreateUrl:
+        ShortenUrl:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
@@ -151,18 +151,18 @@ Outputs:
   HttpApiUrl:
     Description: "Base URL for the tylink HTTP API"
     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
-  CreateUrlApi:
-    Description: "API Gateway endpoint URL for the create-URL route"
+  ShortenUrlApi:
+    Description: "API Gateway endpoint URL for the shorten-URL route"
     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls"
   DecodeUrlApi:
     Description: "API Gateway endpoint URL for the decode-URL route"
     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls/{shortCode}"
-  CreateUrlFunction:
-    Description: "Create URL Lambda Function ARN"
-    Value: !GetAtt CreateUrlFunction.Arn
-  CreateUrlFunctionIamRole:
-    Description: "Implicit IAM Role created for the Create URL function"
-    Value: !GetAtt CreateUrlFunctionRole.Arn
+  ShortenUrlFunction:
+    Description: "Shorten URL Lambda Function ARN"
+    Value: !GetAtt ShortenUrlFunction.Arn
+  ShortenUrlFunctionIamRole:
+    Description: "Implicit IAM Role created for the Shorten URL function"
+    Value: !GetAtt ShortenUrlFunctionRole.Arn
   DecodeUrlFunction:
     Description: "Decode URL Lambda Function ARN"
     Value: !GetAtt DecodeUrlFunction.Arn

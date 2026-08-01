@@ -71,19 +71,19 @@ UserPool ──► UserPoolClient ──► OptionalJwtAuthorizerFunction (env v
                           HttpApi.Auth.Authorizers.OptionalJwtAuthorizer
                                             │ Auth.Authorizer: OptionalJwtAuthorizer
                                             ▼
-                                CreateUrlFunction's HttpApi Event (POST /v1/urls)
+                                ShortenUrlFunction's HttpApi Event (POST /v1/urls)
 ```
 
 - The function is registered as a **REQUEST-type** authorizer with `AuthorizerPayloadFormatVersion:
   "2.0"` + `EnableSimpleResponses: true`, which is what lets it return the terse
   `{isAuthorized, context}` shape instead of a full IAM policy document.
-- `CreateUrlFunction`'s event is the only route that opts in (`Auth.Authorizer:
+- `ShortenUrlFunction`'s event is the only route that opts in (`Auth.Authorizer:
   OptionalJwtAuthorizer`) — it's a per-route reference, not an API-wide default.
   `DecodeUrlFunction`'s event has no `Auth` block, so it runs fully open with no authorizer.
 - At request time API Gateway invokes the authorizer first, then — because `isAuthorized` is always
-  `true` — always proceeds to `CreateUrlFunction`, injecting the authorizer's `context` map at
-  `requestContext.authorizer.lambda`. See `events/createPrivateUrl.json` /
-  `createPrivateUrl.invalidToken.json` for that shape with and without a verified caller.
+  `true` — always proceeds to `ShortenUrlFunction`, injecting the authorizer's `context` map at
+  `requestContext.authorizer.lambda`. See `events/shortenPrivateUrl.json` /
+  `shortenPrivateUrl.invalidToken.json` for that shape with and without a verified caller.
 
 ## 6. Logical flow: Custom Authorizer ↔ Cognito
 
@@ -119,7 +119,7 @@ The only runtime call to Cognito is the JWKS fetch on a cache miss (step 3); eve
 local. Step `g9` is the crux of the design: `isAuthorized` is `true` unconditionally — the `g6`
 branch only decides `context.ownerId`, never whether the request is let through. Reverse that (tie
 `isAuthorized` to verification success) and every anonymous caller gets a 403 straight from API
-Gateway, `CreateUrlFunction` never runs, and the authorizer stops being "optional."
+Gateway, `ShortenUrlFunction` never runs, and the authorizer stops being "optional."
 
 ## 7. Why not a native `JWT` authorizer
 

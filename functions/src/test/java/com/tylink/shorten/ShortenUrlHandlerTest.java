@@ -1,4 +1,4 @@
-package com.tylink.create;
+package com.tylink.shorten;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
@@ -18,7 +18,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class CreateUrlHandlerTest {
+class ShortenUrlHandlerTest {
 
     private static final String TABLE_NAME = "UrlTable";
 
@@ -45,7 +45,7 @@ class CreateUrlHandlerTest {
     void createsPublicUrlAnonymouslyWhenNoAuthenticatedCaller() {
         DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
         when(dynamoDb.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
-        CreateUrlHandler handler = new CreateUrlHandler(dynamoDb, TABLE_NAME);
+        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
 
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}")
@@ -67,7 +67,7 @@ class CreateUrlHandlerTest {
     @Test
     void rejectsPrivateUrlWithNoAuthenticatedCaller() {
         DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
-        CreateUrlHandler handler = new CreateUrlHandler(dynamoDb, TABLE_NAME);
+        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
 
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\", \"visibility\": \"PRIVATE\"}")
@@ -82,7 +82,7 @@ class CreateUrlHandlerTest {
     void createsPublicUrlAndTagsItWithOwnerFromAuthorizerContext() {
         DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
         when(dynamoDb.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
-        CreateUrlHandler handler = new CreateUrlHandler(dynamoDb, TABLE_NAME);
+        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
 
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/some/very/long/path\", \"visibility\": \"PUBLIC\"}",
@@ -108,7 +108,7 @@ class CreateUrlHandlerTest {
     void createsPrivateUrlOwnedByCaller() {
         DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
         when(dynamoDb.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
-        CreateUrlHandler handler = new CreateUrlHandler(dynamoDb, TABLE_NAME);
+        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
 
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/bobs-private-dashboard\", \"visibility\": \"PRIVATE\"}",
@@ -128,7 +128,7 @@ class CreateUrlHandlerTest {
     @Test
     void rejectsMissingLongUrl() {
         DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
-        CreateUrlHandler handler = new CreateUrlHandler(dynamoDb, TABLE_NAME);
+        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
 
         APIGatewayV2HTTPEvent event = eventWithOwnerId("{}", "11111111-1111-1111-1111-111111111111");
 
@@ -140,7 +140,7 @@ class CreateUrlHandlerTest {
     @Test
     void rejectsInvalidVisibility() {
         DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
-        CreateUrlHandler handler = new CreateUrlHandler(dynamoDb, TABLE_NAME);
+        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
 
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/x\", \"visibility\": \"SECRET\"}",

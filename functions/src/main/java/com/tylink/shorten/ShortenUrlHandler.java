@@ -1,14 +1,14 @@
-package com.tylink.create;
+package com.tylink.shorten;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 import com.tylink.auth.AuthUtils;
-import com.tylink.create.model.CreateUrlRequest;
-import com.tylink.create.model.ShortUrl;
-import com.tylink.create.model.Visibility;
-import com.tylink.create.util.ShortCodeGenerator;
+import com.tylink.shorten.model.ShortUrl;
+import com.tylink.shorten.model.ShortenUrlRequest;
+import com.tylink.shorten.model.Visibility;
+import com.tylink.shorten.util.ShortCodeGenerator;
 import com.tylink.util.RequestUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,18 +20,18 @@ import software.amazon.lambda.powertools.logging.Logging;
 import java.util.Map;
 import java.util.Optional;
 
-public class CreateUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
+public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
 
-    private static final Logger log = LogManager.getLogger(CreateUrlHandler.class);
+    private static final Logger log = LogManager.getLogger(ShortenUrlHandler.class);
 
     private final DynamoDbClient dynamoDb;
     private final String tableName;
 
-    public CreateUrlHandler() {
+    public ShortenUrlHandler() {
         this(DynamoDbClient.create(), System.getenv("TABLE_NAME"));
     }
 
-    CreateUrlHandler(DynamoDbClient dynamoDb, String tableName) {
+    ShortenUrlHandler(DynamoDbClient dynamoDb, String tableName) {
         this.dynamoDb = dynamoDb;
         this.tableName = tableName;
     }
@@ -40,7 +40,7 @@ public class CreateUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
     @Override
     public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent input, Context context) {
         log.info("Event: {}", input);
-        Optional<CreateUrlRequest> request = RequestUtils.parseBody(input.getBody(), CreateUrlRequest.class);
+        Optional<ShortenUrlRequest> request = RequestUtils.parseBody(input.getBody(), ShortenUrlRequest.class);
         if (request.isEmpty()) {
             log.error("Request body is empty!");
             return RequestUtils.jsonResponse(400, Map.of("message", "invalid request body"));

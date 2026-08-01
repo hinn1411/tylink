@@ -1,6 +1,6 @@
-package com.tylink.create.model;
+package com.tylink.shorten.model;
 
-import com.tylink.create.util.ShortUrlAttributes;
+import com.tylink.shorten.util.ShortUrlAttributes;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.time.Instant;

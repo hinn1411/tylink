@@ -3,7 +3,7 @@
 A serverless URL shortener built with AWS SAM, Java 21, and AWS Lambda Powertools.
 
 - `functions/` — Maven module with all Lambda handler source (`src/main/java`) and unit tests (`src/test/java`).
-- `events/` — sample invocation payloads for local testing (`createUrlPublic.authenticated.json`, `createPrivateUrl.json`, `createPublicUrl.json`, `createPrivateUrl.invalidToken.json`, `decodeUrl.json`).
+- `events/` — sample invocation payloads for local testing (`shortenUrlPublic.authenticated.json`, `shortenPrivateUrl.json`, `shortenPublicUrl.json`, `shortenPrivateUrl.invalidToken.json`, `decodeUrl.json`).
 - `template.yaml` — SAM template defining the application's AWS resources (Lambda functions, DynamoDB table, HTTP API).
 - `samconfig.toml` — saved CLI defaults (stack name `tylink`, `CAPABILITY_IAM`, etc.) so most commands below need no extra flags.
 - `docs/` — project plans (`plans/`), technical-decision records (`technical_decisions/`), and learning notes (`learning/`). Start at `docs/plans/00-overview.md` for full project context.
@@ -57,7 +57,7 @@ a Docker container matching the Lambda execution environment exactly (e.g. if
 
 ```bash
 # Invoke a single function with a sample event (no HTTP layer involved)
-sam local invoke CreateUrlFunction --event events/createUrlPublic.authenticated.json
+sam local invoke ShortenUrlFunction --event events/shortenUrlPublic.authenticated.json
 
 # Start the full HTTP API locally on port 3000 (reads routes from
 # each function's `Events` block in template.yaml)
@@ -97,13 +97,13 @@ sam deploy            # subsequent deploys reuse samconfig.toml
 ## Invoke the deployed function
 
 ```bash
-sam remote invoke CreateUrlFunction --stack-name tylink --event-file events/createUrlPublic.authenticated.json
+sam remote invoke ShortenUrlFunction --stack-name tylink --event-file events/shortenUrlPublic.authenticated.json
 ```
 
 ## Logs
 
 ```bash
-sam logs -n CreateUrlFunction --stack-name tylink --tail
+sam logs -n ShortenUrlFunction --stack-name tylink --tail
 ```
 
 ## Cleanup

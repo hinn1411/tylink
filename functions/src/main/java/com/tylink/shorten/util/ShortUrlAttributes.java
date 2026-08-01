@@ -1,4 +1,4 @@
-package com.tylink.create.util;
+package com.tylink.shorten.util;
 
 public final class ShortUrlAttributes {
 
