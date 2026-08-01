@@ -7,9 +7,10 @@ import java.util.Optional;
 public enum Visibility {
     PUBLIC, PRIVATE;
 
-    /** Blank input defaults to PUBLIC; anything other than PUBLIC/PRIVATE is invalid (empty). */
     public static Optional<Visibility> parse(String raw) {
-        if (StringUtils.isBlank(raw)) {
+        // Default is PUBLIC
+        if (StringUtils.isBlank(
+            raw)) {
             return Optional.of(PUBLIC);
         }
         try {

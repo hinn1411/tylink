@@ -12,9 +12,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * REQUEST-type HTTP API authorizer that never denies a request — routes behind it must stay
- * reachable by anonymous callers, which a native JWT authorizer can't express (it's all-or-
- * nothing per route). When the Authorization header carries a valid Cognito token, its verified
+ * This handler never rejects a request, it only extracts identify from JWT.
+ * When the Authorization header carries a valid Cognito token, its verified
  * {@code sub} is passed through as {@code ownerId} in the authorizer context; otherwise the
  * context is empty and downstream handlers treat the caller as anonymous.
  */

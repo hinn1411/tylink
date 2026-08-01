@@ -1,5 +1,6 @@
 package com.tylink.create.model;
 
+import com.tylink.create.util.ShortUrlAttributes;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.time.Instant;
@@ -14,21 +15,20 @@ public record ShortUrl(String shortCode, String longUrl, String ownerId, Visibil
 
     public Map<String, AttributeValue> toItem() {
         Map<String, AttributeValue> item = new HashMap<>();
-        item.put("PK", AttributeValue.fromS("URL#" + shortCode));
-        item.put("SK", AttributeValue.fromS("METADATA"));
-        item.put("longUrl", AttributeValue.fromS(longUrl));
-        item.put("visibility", AttributeValue.fromS(visibility.name()));
-        item.put("status", AttributeValue.fromS("ACTIVE"));
-        item.put("createdAt", AttributeValue.fromS(createdAt));
+        item.put(ShortUrlAttributes.PK, AttributeValue.fromS(ShortUrlAttributes.URL_KEY_PREFIX + shortCode));
+        item.put(ShortUrlAttributes.SK, AttributeValue.fromS(ShortUrlAttributes.SK_METADATA));
+        item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS(longUrl));
+        item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS(visibility.name()));
+        item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS(ShortUrlAttributes.STATUS_ACTIVE));
+        item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS(createdAt));
 
-        // Anonymous PUBLIC creates have no owner: omit ownerId and both GSI1 key
-        // attributes together (a composite-key GSI needs both present to index the
-        // item at all, so writing only one would just be dead attribute noise).
+        // Do not partition url for unauthenticated users
         if (ownerId != null) {
-            String owner = "USER#" + ownerId;
-            item.put("ownerId", AttributeValue.fromS(owner));
-            item.put("GSI1_PK", AttributeValue.fromS(owner));
-            item.put("GSI1_SK", AttributeValue.fromS("URL#" + createdAt + "#" + shortCode));
+            String owner = ShortUrlAttributes.USER_KEY_PREFIX + ownerId;
+            item.put(ShortUrlAttributes.OWNER_ID, AttributeValue.fromS(owner));
+            item.put(ShortUrlAttributes.GSI1_PK, AttributeValue.fromS(owner));
+            item.put(ShortUrlAttributes.GSI1_SK,
+                    AttributeValue.fromS(ShortUrlAttributes.URL_KEY_PREFIX + createdAt + "#" + shortCode));
         }
         return item;
     }

@@ -100,9 +100,6 @@ Resources:
           KeyType: HASH
         - AttributeName: SK
           KeyType: RANGE
-      # GSI1_PK=USER#<userId> / GSI1_SK=URL#<createdAt>#<shortCode> — every item
-      # CreateUrlFunction writes already carries these, for the future "list a
-      # user's URLs" access pattern (see docs/technical_decisions/04-dynamodb-access-patterns.md).
       GlobalSecondaryIndexes:
         - IndexName: GSI1
           KeySchema:

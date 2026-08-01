@@ -65,12 +65,11 @@
           <artifactId>jackson-databind</artifactId>
           <version>${jackson.version}</version>
         </dependency>
-        <!-- Used by CreateUrlHandler (PutItem) as well as the integration test below -->
         <dependency>
           <groupId>software.amazon.awssdk</groupId>
           <artifactId>dynamodb</artifactId>
         </dependency>
-        <!-- Used by OptionalJwtAuthorizerHandler to verify Cognito-issued tokens against the User Pool's JWKS -->
+        <!-- Used by custom Lambda authorizer-->
         <dependency>
           <groupId>com.auth0</groupId>
           <artifactId>java-jwt</artifactId>
@@ -161,12 +160,6 @@
       </plugins>
     </build>
 
-    <!-- Integration tests (*IT.java) are opt-in via `-Pintegration-test`, not part of the
-         default lifecycle: they need a Docker daemon for Testcontainers, which isn't available
-         inside the containerized SAM build (Docker-in-Docker). Keeping them out of
-         `mvn clean install`/`sam build` means the Lambda artifact build never depends on Docker;
-         run `mvn verify -Pintegration-test` explicitly (locally, or as its own CI stage with a
-         sibling Docker daemon) to exercise them. -->
     <profiles>
       <profile>
         <id>integration-test</id>
@@ -177,10 +170,6 @@
               <artifactId>maven-failsafe-plugin</artifactId>
               <version>3.2.5</version>
               <configuration>
-                <!-- This environment's Docker Desktop has no real /var/run/docker.sock, which
-                     Ryuk (Testcontainers' cleanup sidecar) needs to bind-mount into itself.
-                     Without this it crashes on startup and looks like a container-not-found
-                     error. Safe to disable for a local dev/CI run of this test suite. -->
                 <environmentVariables>
                   <TESTCONTAINERS_RYUK_DISABLED>true</TESTCONTAINERS_RYUK_DISABLED>
                 </environmentVariables>
