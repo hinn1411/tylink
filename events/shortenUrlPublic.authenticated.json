@@ -23,8 +23,13 @@
     "routeKey": "POST /v1/urls",
     "stage": "$default",
     "time": "09/Apr/2015:12:34:56 +0000",
-    "timeEpoch": 1428582896000
+    "timeEpoch": 1428582896000,
+    "authorizer": {
+      "lambda": {
+        "ownerId": "11111111-1111-1111-1111-111111111111"
+      }
+    }
   },
-  "body": "{\"longUrl\": \"https://example.com/some/very/long/path\"}",
+  "body": "{\"longUrl\": \"https://example.com/some/very/long/path\", \"visibility\": \"PUBLIC\"}",
   "isBase64Encoded": false
 }
