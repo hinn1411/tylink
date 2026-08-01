@@ -8,7 +8,7 @@ import com.tylink.auth.AuthUtils;
 import com.tylink.shorten.model.ShortUrl;
 import com.tylink.shorten.model.ShortenUrlRequest;
 import com.tylink.shorten.model.Visibility;
-import com.tylink.shorten.util.ShortCodeGenerator;
+import com.tylink.shorten.util.ShortUrlGenerator;
 import com.tylink.util.RequestUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -68,7 +68,7 @@ public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, 
     }
 
     private APIGatewayV2HTTPResponse createUrl(String longUrl, Optional<String> ownerId, Visibility visibility) {
-        ShortUrl shortUrl = ShortUrl.create(ShortCodeGenerator.generate(), longUrl, ownerId.orElse(null), visibility);
+        ShortUrl shortUrl = ShortUrl.create(ShortUrlGenerator.generate(), longUrl, ownerId.orElse(null), visibility);
         dynamoDb.putItem(PutItemRequest.builder()
                 .tableName(tableName)
                 .item(shortUrl.toItem())

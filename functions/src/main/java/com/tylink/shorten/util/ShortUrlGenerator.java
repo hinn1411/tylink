@@ -3,14 +3,14 @@ package com.tylink.shorten.util;
 import java.security.SecureRandom;
 import java.util.stream.Collectors;
 
-public final class ShortCodeGenerator {
+public final class ShortUrlGenerator {
 
     private static final String BASE62_ALPHABET =
             "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final int SHORT_CODE_LENGTH = 7;
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private ShortCodeGenerator() {
+    private ShortUrlGenerator() {
     }
 
     public static String generate() {
