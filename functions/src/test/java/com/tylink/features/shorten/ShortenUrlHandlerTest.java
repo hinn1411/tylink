@@ -1,26 +1,35 @@
-package com.tylink.shorten;
+package com.tylink.features.shorten;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
+import com.tylink.model.ShortUrl;
+import com.tylink.model.Visibility;
+import com.tylink.repository.UrlRepository;
+import com.tylink.repository.UrlRepositoryException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
-import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.PutItemResponse;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class ShortenUrlHandlerTest {
 
-    private static final String TABLE_NAME = "UrlTable";
+    private UrlRepository urlRepository;
+    private ShortenUrlHandler handler;
+
+    @BeforeEach
+    void setUp() {
+        urlRepository = mock(UrlRepository.class);
+        handler = new ShortenUrlHandler(urlRepository);
+    }
 
     /**
      * Mimics what ExtractTokenAuthorizerHandler actually returns as its authorizer context after
@@ -43,10 +52,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void createsPublicUrlAnonymouslyWhenNoAuthenticatedCaller() {
-        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
-        when(dynamoDb.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
-        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
-
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}")
                 .build();
@@ -56,19 +61,13 @@ class ShortenUrlHandlerTest {
         assertEquals(201, response.getStatusCode());
         assertTrue(response.getBody().contains("\"visibility\":\"PUBLIC\""));
 
-        ArgumentCaptor<PutItemRequest> captor = ArgumentCaptor.forClass(PutItemRequest.class);
-        verify(dynamoDb).putItem(captor.capture());
-        Map<String, software.amazon.awssdk.services.dynamodb.model.AttributeValue> item = captor.getValue().item();
-        assertFalse(item.containsKey("ownerId"));
-        assertFalse(item.containsKey("GSI1_PK"));
-        assertFalse(item.containsKey("GSI1_SK"));
+        ArgumentCaptor<ShortUrl> captor = ArgumentCaptor.forClass(ShortUrl.class);
+        verify(urlRepository).save(captor.capture());
+        assertNull(captor.getValue().ownerId());
     }
 
     @Test
     void rejectsPrivateUrlWithNoAuthenticatedCaller() {
-        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
-
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\", \"visibility\": \"PRIVATE\"}")
                 .build();
@@ -80,10 +79,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void createsPublicUrlAndTagsItWithOwnerFromAuthorizerContext() {
-        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
-        when(dynamoDb.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
-        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
-
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/some/very/long/path\", \"visibility\": \"PUBLIC\"}",
                 "11111111-1111-1111-1111-111111111111");
@@ -93,23 +88,14 @@ class ShortenUrlHandlerTest {
         assertEquals(201, response.getStatusCode());
         assertTrue(response.getBody().contains("\"visibility\":\"PUBLIC\""));
 
-        ArgumentCaptor<PutItemRequest> captor = ArgumentCaptor.forClass(PutItemRequest.class);
-        verify(dynamoDb).putItem(captor.capture());
-        Map<String, software.amazon.awssdk.services.dynamodb.model.AttributeValue> item = captor.getValue().item();
-        assertEquals(TABLE_NAME, captor.getValue().tableName());
-        assertEquals("METADATA", item.get("SK").s());
-        assertEquals("PUBLIC", item.get("visibility").s());
-        assertEquals("USER#11111111-1111-1111-1111-111111111111", item.get("ownerId").s());
-        assertEquals(item.get("ownerId").s(), item.get("GSI1_PK").s());
-        assertTrue(item.get("PK").s().startsWith("URL#"));
+        ArgumentCaptor<ShortUrl> captor = ArgumentCaptor.forClass(ShortUrl.class);
+        verify(urlRepository).save(captor.capture());
+        assertEquals(Visibility.PUBLIC, captor.getValue().visibility());
+        assertEquals("11111111-1111-1111-1111-111111111111", captor.getValue().ownerId());
     }
 
     @Test
     void createsPrivateUrlOwnedByCaller() {
-        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
-        when(dynamoDb.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
-        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
-
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/bobs-private-dashboard\", \"visibility\": \"PRIVATE\"}",
                 "22222222-2222-2222-2222-222222222222");
@@ -119,17 +105,14 @@ class ShortenUrlHandlerTest {
         assertEquals(201, response.getStatusCode());
         assertTrue(response.getBody().contains("\"visibility\":\"PRIVATE\""));
 
-        ArgumentCaptor<PutItemRequest> captor = ArgumentCaptor.forClass(PutItemRequest.class);
-        verify(dynamoDb).putItem(captor.capture());
-        assertEquals("PRIVATE", captor.getValue().item().get("visibility").s());
-        assertEquals("USER#22222222-2222-2222-2222-222222222222", captor.getValue().item().get("ownerId").s());
+        ArgumentCaptor<ShortUrl> captor = ArgumentCaptor.forClass(ShortUrl.class);
+        verify(urlRepository).save(captor.capture());
+        assertEquals(Visibility.PRIVATE, captor.getValue().visibility());
+        assertEquals("22222222-2222-2222-2222-222222222222", captor.getValue().ownerId());
     }
 
     @Test
     void rejectsMissingLongUrl() {
-        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
-
         APIGatewayV2HTTPEvent event = eventWithOwnerId("{}", "11111111-1111-1111-1111-111111111111");
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
@@ -139,9 +122,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void rejectsInvalidVisibility() {
-        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(dynamoDb, TABLE_NAME);
-
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/x\", \"visibility\": \"SECRET\"}",
                 "11111111-1111-1111-1111-111111111111");
@@ -149,5 +129,68 @@ class ShortenUrlHandlerTest {
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
 
         assertEquals(400, response.getStatusCode());
+    }
+
+    @Test
+    void rejectsNonHttpProtocol() {
+        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
+                .withBody("{\"longUrl\": \"javascript:alert(1)\"}")
+                .build();
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
+
+        assertEquals(400, response.getStatusCode());
+    }
+
+    @Test
+    void rejectsUrlWithHtmlPayload() {
+        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
+                .withBody("{\"longUrl\": \"http://example.com/<script>alert(1)</script>\"}")
+                .build();
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
+
+        assertEquals(400, response.getStatusCode());
+    }
+
+    @Test
+    void rejectsUrlWithControlCharacters() {
+        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
+                .withBody("{\"longUrl\": \"http://example.com/\\r\\nSet-Cookie: evil=1\"}")
+                .build();
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
+
+        assertEquals(400, response.getStatusCode());
+    }
+
+    @Test
+    void acceptsUrlWithQueryParametersAndFragment() {
+        String longUrl = "https://example.com/path?foo=bar&baz=qux#section";
+        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
+                .withBody("{\"longUrl\": \"" + longUrl + "\"}")
+                .build();
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
+
+        assertEquals(201, response.getStatusCode());
+
+        ArgumentCaptor<ShortUrl> captor = ArgumentCaptor.forClass(ShortUrl.class);
+        verify(urlRepository).save(captor.capture());
+        assertEquals(longUrl, captor.getValue().longUrl());
+    }
+
+    @Test
+    void returns500WhenUrlRepositorySaveFails() {
+        doThrow(new UrlRepositoryException("service unavailable", new RuntimeException("boom")))
+                .when(urlRepository).save(any(ShortUrl.class));
+
+        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
+                .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}")
+                .build();
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
+
+        assertEquals(500, response.getStatusCode());
     }
 }

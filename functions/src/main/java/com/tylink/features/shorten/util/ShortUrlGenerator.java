@@ -1,4 +1,4 @@
-package com.tylink.shorten.util;
+package com.tylink.features.shorten.util;
 
 import java.security.SecureRandom;
 import java.util.stream.Collectors;
