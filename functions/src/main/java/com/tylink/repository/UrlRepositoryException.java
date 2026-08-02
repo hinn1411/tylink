@@ -1,4 +1,4 @@
-package com.tylink.shorten.repository;
+package com.tylink.repository;
 
 public class UrlRepositoryException extends RuntimeException {
     public UrlRepositoryException(String message, Throwable cause) {

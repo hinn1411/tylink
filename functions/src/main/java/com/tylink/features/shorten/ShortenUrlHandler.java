@@ -1,18 +1,18 @@
-package com.tylink.shorten;
+package com.tylink.features.shorten;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 import com.tylink.auth.AuthUtils;
-import com.tylink.shorten.model.ShortUrl;
-import com.tylink.shorten.model.ShortenUrlRequest;
-import com.tylink.shorten.model.Visibility;
-import com.tylink.shorten.repository.DynamoDbUrlRepository;
-import com.tylink.shorten.repository.UrlRepository;
-import com.tylink.shorten.repository.UrlRepositoryException;
-import com.tylink.shorten.util.LongUrlValidator;
-import com.tylink.shorten.util.ShortUrlGenerator;
+import com.tylink.features.shorten.model.ShortenUrlRequest;
+import com.tylink.features.shorten.util.LongUrlValidator;
+import com.tylink.features.shorten.util.ShortUrlGenerator;
+import com.tylink.model.ShortUrl;
+import com.tylink.model.Visibility;
+import com.tylink.repository.DynamoDbUrlRepository;
+import com.tylink.repository.UrlRepository;
+import com.tylink.repository.UrlRepositoryException;
 import com.tylink.util.RequestUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

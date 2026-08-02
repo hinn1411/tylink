@@ -1,4 +1,4 @@
-package com.tylink.shorten.util;
+package com.tylink.features.shorten.util;
 
 import software.amazon.awssdk.utils.StringUtils;
 
@@ -27,7 +27,7 @@ public final class LongUrlValidator {
             return Optional.empty();
         }
         String trimmed = rawUrl.trim();
-        if (trimmed.length() > MAX_LENGTH || containsControlCharacter(trimmed)) {
+        if (trimmed.length() > MAX_LENGTH) {
             return Optional.empty();
         }
 
@@ -47,9 +47,5 @@ public final class LongUrlValidator {
         }
 
         return Optional.of(trimmed);
-    }
-
-    private static boolean containsControlCharacter(String value) {
-        return value.chars().anyMatch(Character::isISOControl);
     }
 }

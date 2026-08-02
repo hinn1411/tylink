@@ -1,11 +1,12 @@
-package com.tylink.shorten;
+package com.tylink.features.shorten;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
-import com.tylink.shorten.model.ShortUrl;
-import com.tylink.shorten.model.Visibility;
-import com.tylink.shorten.repository.UrlRepository;
-import com.tylink.shorten.repository.UrlRepositoryException;
+import com.tylink.model.ShortUrl;
+import com.tylink.model.Visibility;
+import com.tylink.repository.UrlRepository;
+import com.tylink.repository.UrlRepositoryException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -20,6 +21,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 class ShortenUrlHandlerTest {
+
+    private UrlRepository urlRepository;
+    private ShortenUrlHandler handler;
+
+    @BeforeEach
+    void setUp() {
+        urlRepository = mock(UrlRepository.class);
+        handler = new ShortenUrlHandler(urlRepository);
+    }
 
     /**
      * Mimics what ExtractTokenAuthorizerHandler actually returns as its authorizer context after
@@ -42,9 +52,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void createsPublicUrlAnonymouslyWhenNoAuthenticatedCaller() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
-
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}")
                 .build();
@@ -61,9 +68,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void rejectsPrivateUrlWithNoAuthenticatedCaller() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
-
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\", \"visibility\": \"PRIVATE\"}")
                 .build();
@@ -75,9 +79,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void createsPublicUrlAndTagsItWithOwnerFromAuthorizerContext() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
-
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/some/very/long/path\", \"visibility\": \"PUBLIC\"}",
                 "11111111-1111-1111-1111-111111111111");
@@ -95,9 +96,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void createsPrivateUrlOwnedByCaller() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
-
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/bobs-private-dashboard\", \"visibility\": \"PRIVATE\"}",
                 "22222222-2222-2222-2222-222222222222");
@@ -115,9 +113,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void rejectsMissingLongUrl() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
-
         APIGatewayV2HTTPEvent event = eventWithOwnerId("{}", "11111111-1111-1111-1111-111111111111");
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
@@ -127,9 +122,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void rejectsInvalidVisibility() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
-
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/x\", \"visibility\": \"SECRET\"}",
                 "11111111-1111-1111-1111-111111111111");
@@ -141,9 +133,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void rejectsNonHttpProtocol() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
-
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"javascript:alert(1)\"}")
                 .build();
@@ -155,9 +144,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void rejectsUrlWithHtmlPayload() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
-
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"http://example.com/<script>alert(1)</script>\"}")
                 .build();
@@ -169,9 +155,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void rejectsUrlWithControlCharacters() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
-
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"http://example.com/\\r\\nSet-Cookie: evil=1\"}")
                 .build();
@@ -183,9 +166,6 @@ class ShortenUrlHandlerTest {
 
     @Test
     void acceptsUrlWithQueryParametersAndFragment() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
-
         String longUrl = "https://example.com/path?foo=bar&baz=qux#section";
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"" + longUrl + "\"}")
@@ -202,10 +182,8 @@ class ShortenUrlHandlerTest {
 
     @Test
     void returns500WhenUrlRepositorySaveFails() {
-        UrlRepository urlRepository = mock(UrlRepository.class);
         doThrow(new UrlRepositoryException("service unavailable", new RuntimeException("boom")))
                 .when(urlRepository).save(any(ShortUrl.class));
-        ShortenUrlHandler handler = new ShortenUrlHandler(urlRepository);
 
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
                 .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}")

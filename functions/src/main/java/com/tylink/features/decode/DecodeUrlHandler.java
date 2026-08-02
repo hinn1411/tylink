@@ -1,4 +1,4 @@
-package com.tylink.decode;
+package com.tylink.features.decode;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;

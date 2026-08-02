@@ -1,6 +1,6 @@
-package com.tylink.shorten.repository;
+package com.tylink.repository;
 
-import com.tylink.shorten.model.ShortUrl;
+import com.tylink.model.ShortUrl;
 
 public interface UrlRepository {
 

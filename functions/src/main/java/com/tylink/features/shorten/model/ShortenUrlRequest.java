@@ -1,4 +1,4 @@
-package com.tylink.shorten.model;
+package com.tylink.features.shorten.model;
 
 public class ShortenUrlRequest {
     private String longUrl;

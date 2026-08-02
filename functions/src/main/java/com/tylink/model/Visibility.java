@@ -1,4 +1,4 @@
-package com.tylink.shorten.model;
+package com.tylink.model;
 
 import software.amazon.awssdk.utils.StringUtils;
 

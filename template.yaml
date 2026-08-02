@@ -114,7 +114,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/
-      Handler: com.tylink.shorten.ShortenUrlHandler::handleRequest
+      Handler: com.tylink.features.shorten.ShortenUrlHandler::handleRequest
       Environment:
         Variables:
           TABLE_NAME: !Ref UrlTable
@@ -135,7 +135,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/
-      Handler: com.tylink.decode.DecodeUrlHandler::handleRequest
+      Handler: com.tylink.features.decode.DecodeUrlHandler::handleRequest
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref UrlTable
