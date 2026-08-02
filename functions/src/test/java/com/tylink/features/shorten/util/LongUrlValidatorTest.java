@@ -4,10 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class LongUrlValidatorTest {
 
@@ -19,13 +17,13 @@ class LongUrlValidatorTest {
             "https://example.com/some/very/long/path?id=1"
     })
     void acceptsWellFormedHttpAndHttpsUrls(String url) {
-        assertEquals(Optional.of(url.trim()), LongUrlValidator.validate(url));
+        assertEquals(url.trim(), LongUrlValidator.validate(url));
     }
 
     @Test
     void acceptsUrlWithLeadingAndTrailingWhitespaceAfterTrimming() {
-        Optional<String> result = LongUrlValidator.validate("  https://example.com/x  ");
-        assertEquals(Optional.of("https://example.com/x"), result);
+        String result = LongUrlValidator.validate("  https://example.com/x  ");
+        assertEquals("https://example.com/x", result);
     }
 
     @ParameterizedTest
@@ -37,7 +35,7 @@ class LongUrlValidatorTest {
             "vbscript:msgbox(1)"
     })
     void rejectsNonHttpProtocols(String url) {
-        assertTrue(LongUrlValidator.validate(url).isEmpty());
+        assertNull(LongUrlValidator.validate(url));
     }
 
     @ParameterizedTest
@@ -47,29 +45,69 @@ class LongUrlValidatorTest {
             "http://example.com/ path-with-space"
     })
     void rejectsUrlsWithIllegalUriCharacters(String url) {
-        assertTrue(LongUrlValidator.validate(url).isEmpty());
+        assertNull(LongUrlValidator.validate(url));
     }
 
     @Test
     void rejectsUrlWithEmbeddedCrlf() {
-        assertTrue(LongUrlValidator.validate("http://example.com/\r\nSet-Cookie: evil=1").isEmpty());
+        assertNull(LongUrlValidator.validate("http://example.com/\r\nSet-Cookie: evil=1"));
     }
 
     @Test
     void rejectsUrlWithNoHost() {
-        assertTrue(LongUrlValidator.validate("http:///path").isEmpty());
+        assertNull(LongUrlValidator.validate("http:///path"));
     }
 
     @Test
     void rejectsOverlongUrl() {
         String overlong = "https://example.com/" + "a".repeat(2048);
-        assertTrue(LongUrlValidator.validate(overlong).isEmpty());
+        assertNull(LongUrlValidator.validate(overlong));
     }
 
     @Test
     void rejectsBlankAndNullInput() {
-        assertTrue(LongUrlValidator.validate("").isEmpty());
-        assertTrue(LongUrlValidator.validate("   ").isEmpty());
-        assertTrue(LongUrlValidator.validate(null).isEmpty());
+        assertNull(LongUrlValidator.validate(""));
+        assertNull(LongUrlValidator.validate("   "));
+        assertNull(LongUrlValidator.validate(null));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "facebook.com",
+            "www.facebook.com",
+            "example.com/path",
+            "//example.com/path"
+    })
+    void rejectsUrlsWithNoScheme(String url) {
+        assertNull(LongUrlValidator.validate(url));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "https://example.com",
+            "https://example.com/path"
+    })
+    void acceptsUrlsWithoutSubdomain(String url) {
+        assertEquals(url, LongUrlValidator.validate(url));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "http://93.184.216.34",
+            "http://93.184.216.34/path",
+            "http://127.0.0.1:8080/path"
+    })
+    void acceptsIpv4Hosts(String url) {
+        assertEquals(url, LongUrlValidator.validate(url));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "http://[2001:db8::1]",
+            "http://[2001:db8::1]/path",
+            "http://[::1]:8080/path"
+    })
+    void acceptsIpv6Hosts(String url) {
+        assertEquals(url, LongUrlValidator.validate(url));
     }
 }

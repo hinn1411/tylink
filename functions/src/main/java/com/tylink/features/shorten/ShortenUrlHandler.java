@@ -22,7 +22,6 @@ import software.amazon.awssdk.utils.StringUtils;
 import software.amazon.lambda.powertools.logging.Logging;
 
 import java.util.Map;
-import java.util.Optional;
 
 public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
 
@@ -51,31 +50,31 @@ public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, 
             log.error("Original URL is empty!");
             return RequestUtils.jsonResponse(400, Map.of("message", "longUrl is required"));
         }
-        Optional<String> longUrl = LongUrlValidator.validate(request.getLongUrl());
-        if (longUrl.isEmpty()) {
+        String longUrl = LongUrlValidator.validate(request.getLongUrl());
+        if (longUrl == null) {
             log.error("Raw URL: {} is invalid!", request.getLongUrl());
             return RequestUtils.jsonResponse(400, Map.of("message", "longUrl must be a valid http or https URL"));
         }
 
-        Optional<Visibility> visibility = Visibility.parse(request.getVisibility());
-        if (visibility.isEmpty()) {
+        Visibility visibility = Visibility.parse(request.getVisibility());
+        if (visibility == null) {
             log.error("Visibility: {} is invalid!");
             return RequestUtils.jsonResponse(400, Map.of("message", "visibility must be PUBLIC or PRIVATE"));
         }
 
-        Optional<String> ownerId = AuthUtils.extractOwnerId(input);
+        String ownerId = AuthUtils.extractOwnerId(input);
         log.info("ownerId: {}", ownerId);
         // Public access cannot create private urls
-        if (visibility.get() == Visibility.PRIVATE && ownerId.isEmpty()) {
+        if (visibility == Visibility.PRIVATE && ownerId == null) {
             log.warn("Rejected create URL request: PRIVATE visibility requires an authenticated caller");
             return RequestUtils.jsonResponse(401, Map.of("message", "unauthorized"));
         }
 
-        return createUrl(longUrl.get(), ownerId, visibility.get());
+        return createUrl(longUrl, ownerId, visibility);
     }
 
-    private APIGatewayV2HTTPResponse createUrl(String longUrl, Optional<String> ownerId, Visibility visibility) {
-        ShortUrl shortUrl = ShortUrl.create(ShortUrlGenerator.generate(), longUrl, ownerId.orElse(null), visibility);
+    private APIGatewayV2HTTPResponse createUrl(String longUrl, String ownerId, Visibility visibility) {
+        ShortUrl shortUrl = ShortUrl.create(ShortUrlGenerator.generate(), longUrl, ownerId, visibility);
         try {
             urlRepository.save(shortUrl);
         } catch (UrlRepositoryException e) {
@@ -83,7 +82,7 @@ public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, 
             return RequestUtils.jsonResponse(500, Map.of("message", "failed to create short url"));
         }
 
-        log.info("Created shortCode={} visibility={} anonymous={}", shortUrl.shortCode(), visibility, ownerId.isEmpty());
+        log.info("Created shortCode={} visibility={} anonymous={}", shortUrl.shortCode(), visibility, ownerId == null);
         return RequestUtils.jsonResponse(201, Map.of("shortCode", shortUrl.shortCode(), "visibility", visibility.name()));
     }
 }

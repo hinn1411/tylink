@@ -18,4 +18,6 @@ Added `LongUrlValidator` (`com.tylink.features.shorten.util`), used by `ShortenU
 
 Query parameters and fragments are accepted and stored as-is — the full string is validated as one unit rather than stripped or rewritten.
 
+Bare hosts and protocol-relative URLs (`facebook.com`, `www.facebook.com`, `example.com/path`, `//example.com/path`) are rejected rather than defaulted to `https`. Browsers infer a scheme for this shape of input as an address-bar UX heuristic on human-typed text; this endpoint accepts an arbitrary string from an API caller with no such context, so a bare `facebook.com` is ambiguous (domain? relative path? search term?) rather than obviously a URL. Mechanically this needs no separate logic: `java.net.URI` only resolves a `host` when the input carries an explicit scheme or the RFC 3986 `//` authority marker, so scheme-less input — including `//example.com/path` — parses with `scheme == null` and is already caught by step 4. If product later wants bit.ly-style bare-domain shortening, that should be an explicit normalization step (prepend `https://` when no `://` is present) ahead of `validate()`, not a loosening of the validator itself.
+
 Deferred, tracked separately (feature F6 in `docs/plans/00-overview.md`): domain blocklist for phishing/spam, create-rate-limiting. Neither is an injection/XSS concern.

@@ -2,21 +2,18 @@ package com.tylink.model;
 
 import software.amazon.awssdk.utils.StringUtils;
 
-import java.util.Optional;
-
 public enum Visibility {
     PUBLIC, PRIVATE;
 
-    public static Optional<Visibility> parse(String raw) {
+    public static Visibility parse(String raw) {
         // Default is PUBLIC
-        if (StringUtils.isBlank(
-            raw)) {
-            return Optional.of(PUBLIC);
+        if (StringUtils.isBlank(raw)) {
+            return PUBLIC;
         }
         try {
-            return Optional.of(valueOf(raw.toUpperCase()));
+            return valueOf(raw.toUpperCase());
         } catch (IllegalArgumentException e) {
-            return Optional.empty();
+            return null;
         }
     }
 }
