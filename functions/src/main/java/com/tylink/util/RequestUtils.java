@@ -8,7 +8,6 @@ import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.utils.StringUtils;
 
 import java.util.Map;
-import java.util.Optional;
 
 public final class RequestUtils {
 
@@ -18,15 +17,15 @@ public final class RequestUtils {
     private RequestUtils() {
     }
 
-    public static <T> Optional<T> parseBody(String body, Class<T> type) {
+    public static <T> T parseBody(String body, Class<T> type) {
         if (StringUtils.isBlank(body)) {
-            return Optional.empty();
+            return null;
         }
         try {
-            return Optional.of(MAPPER.readValue(body, type));
+            return MAPPER.readValue(body, type);
         } catch (JsonProcessingException e) {
             log.warn("Rejected request: malformed {} body", type.getSimpleName());
-            return Optional.empty();
+            return null;
         }
     }
 
