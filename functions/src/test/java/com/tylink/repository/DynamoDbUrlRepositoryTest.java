@@ -1,19 +1,24 @@
 package com.tylink.repository;
 
 import com.tylink.model.ShortUrl;
+import com.tylink.model.UrlStatus;
 import com.tylink.model.Visibility;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.DynamoDbException;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemResponse;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -92,6 +97,98 @@ class DynamoDbUrlRepositoryTest {
         ShortUrl shortUrl = ShortUrl.create("abc1234", "https://example.com/x", null, Visibility.PUBLIC);
 
         UrlRepositoryException thrown = assertThrows(UrlRepositoryException.class, () -> repository.save(shortUrl));
+        assertSame(cause, thrown.getCause());
+    }
+
+    @Test
+    void findByShortCodeUsesCorrectKey() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        when(dynamoDb.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+        DynamoDbUrlRepository repository = new DynamoDbUrlRepository(dynamoDb, TABLE_NAME);
+
+        repository.findByShortCode("abc1234");
+
+        ArgumentCaptor<GetItemRequest> captor = ArgumentCaptor.forClass(GetItemRequest.class);
+        verify(dynamoDb).getItem(captor.capture());
+        assertEquals(TABLE_NAME, captor.getValue().tableName());
+        assertEquals("URL#abc1234", captor.getValue().key().get(ShortUrlAttributes.PK).s());
+        assertEquals("METADATA", captor.getValue().key().get(ShortUrlAttributes.SK).s());
+    }
+
+    @Test
+    void findByShortCodeReturnsNullWhenItemDoesNotExist() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        when(dynamoDb.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+        DynamoDbUrlRepository repository = new DynamoDbUrlRepository(dynamoDb, TABLE_NAME);
+
+        assertNull(repository.findByShortCode("abc1234"));
+    }
+
+    @Test
+    void findByShortCodeMapsItemBackToShortUrlIncludingOwnerPrefixStrip() {
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
+        item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PRIVATE"));
+        item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("ACTIVE"));
+        item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        item.put(ShortUrlAttributes.OWNER_ID, AttributeValue.fromS("USER#u1"));
+
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        when(dynamoDb.getItem(any(GetItemRequest.class)))
+                .thenReturn(GetItemResponse.builder().item(item).build());
+        DynamoDbUrlRepository repository = new DynamoDbUrlRepository(dynamoDb, TABLE_NAME);
+
+        ShortUrl shortUrl = repository.findByShortCode("abc1234");
+
+        assertEquals("abc1234", shortUrl.shortCode());
+        assertEquals("https://example.com/x", shortUrl.longUrl());
+        assertEquals("u1", shortUrl.ownerId());
+        assertEquals(Visibility.PRIVATE, shortUrl.visibility());
+        assertEquals(UrlStatus.ACTIVE, shortUrl.status());
+        assertEquals("2026-01-01T00:00:00Z", shortUrl.createdAt());
+    }
+
+    @Test
+    void findByShortCodeReturnsNullOwnerIdWhenAbsent() {
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
+        item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PUBLIC"));
+        item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("ACTIVE"));
+        item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        when(dynamoDb.getItem(any(GetItemRequest.class)))
+                .thenReturn(GetItemResponse.builder().item(item).build());
+        DynamoDbUrlRepository repository = new DynamoDbUrlRepository(dynamoDb, TABLE_NAME);
+
+        assertNull(repository.findByShortCode("abc1234").ownerId());
+    }
+
+    @Test
+    void findByShortCodeParsesDeletedStatus() {
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
+        item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PUBLIC"));
+        item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("DELETED"));
+        item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        when(dynamoDb.getItem(any(GetItemRequest.class)))
+                .thenReturn(GetItemResponse.builder().item(item).build());
+        DynamoDbUrlRepository repository = new DynamoDbUrlRepository(dynamoDb, TABLE_NAME);
+
+        assertEquals(UrlStatus.DELETED, repository.findByShortCode("abc1234").status());
+    }
+
+    @Test
+    void findByShortCodeWrapsSdkExceptionAsUrlRepositoryException() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        RuntimeException cause = DynamoDbException.builder().message("service unavailable").build();
+        when(dynamoDb.getItem(any(GetItemRequest.class))).thenThrow(cause);
+        DynamoDbUrlRepository repository = new DynamoDbUrlRepository(dynamoDb, TABLE_NAME);
+
+        UrlRepositoryException thrown =
+                assertThrows(UrlRepositoryException.class, () -> repository.findByShortCode("abc1234"));
         assertSame(cause, thrown.getCause());
     }
 

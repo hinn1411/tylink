@@ -15,6 +15,7 @@ class ShortUrlTest {
         assertEquals("https://example.com/x", shortUrl.longUrl());
         assertEquals("u1", shortUrl.ownerId());
         assertEquals(Visibility.PRIVATE, shortUrl.visibility());
+        assertEquals(UrlStatus.ACTIVE, shortUrl.status());
         assertFalse(shortUrl.createdAt().isBlank());
     }
 }

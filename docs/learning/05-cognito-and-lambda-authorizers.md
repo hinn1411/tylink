@@ -77,9 +77,8 @@ UserPool ──► UserPoolClient ──► ExtractTokenAuthorizerFunction (env 
 - The function is registered as a **REQUEST-type** authorizer with `AuthorizerPayloadFormatVersion:
   "2.0"` + `EnableSimpleResponses: true`, which is what lets it return the terse
   `{isAuthorized, context}` shape instead of a full IAM policy document.
-- `ShortenUrlFunction`'s event is the only route that opts in (`Auth.Authorizer:
+- `ShortenUrlFunction` and `RedirectUrlFunction`'s events opt in (`Auth.Authorizer:
   ExtractTokenAuthorizer`) — it's a per-route reference, not an API-wide default.
-  `DecodeUrlFunction`'s event has no `Auth` block, so it runs fully open with no authorizer.
 - At request time API Gateway invokes the authorizer first, then — because `isAuthorized` is always
   `true` — always proceeds to `ShortenUrlFunction`, injecting the authorizer's `context` map at
   `requestContext.authorizer.lambda`. See `events/shortenPrivateUrl.json` /
