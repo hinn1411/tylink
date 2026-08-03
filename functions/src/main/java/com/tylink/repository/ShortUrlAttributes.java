@@ -13,7 +13,6 @@ public final class ShortUrlAttributes {
     public static final String GSI1_SK = "GSI1_SK";
 
     public static final String SK_METADATA = "METADATA";
-    public static final String STATUS_ACTIVE = "ACTIVE";
 
     public static final String URL_KEY_PREFIX = "URL#";
     public static final String USER_KEY_PREFIX = "USER#";

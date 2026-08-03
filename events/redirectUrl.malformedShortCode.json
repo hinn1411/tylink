@@ -1,7 +1,7 @@
 {
   "version": "2.0",
   "routeKey": "GET /v1/urls/{shortCode}",
-  "rawPath": "/v1/urls/abc123",
+  "rawPath": "/v1/urls/abc-123",
   "rawQueryString": "",
   "headers": {
     "user-agent": "Custom User Agent String"
@@ -13,7 +13,7 @@
     "domainPrefix": "1234567890",
     "http": {
       "method": "GET",
-      "path": "/v1/urls/abc123",
+      "path": "/v1/urls/abc-123",
       "protocol": "HTTP/1.1",
       "sourceIp": "127.0.0.1",
       "userAgent": "Custom User Agent String"
@@ -25,7 +25,7 @@
     "timeEpoch": 1428582896000
   },
   "pathParameters": {
-    "shortCode": "abc123"
+    "shortCode": "abc-123"
   },
   "isBase64Encoded": false
 }

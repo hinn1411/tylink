@@ -3,7 +3,7 @@
 A serverless URL shortener built with AWS SAM, Java 21, and AWS Lambda Powertools.
 
 - `functions/` — Maven module with all Lambda handler source (`src/main/java`) and unit tests (`src/test/java`).
-- `events/` — sample invocation payloads for local testing (`shortenUrlPublic.authenticated.json`, `shortenPrivateUrl.json`, `shortenPublicUrl.json`, `shortenPrivateUrl.invalidToken.json`, `decodeUrl.json`).
+- `events/` — sample invocation payloads for local testing (`shortenUrlPublic.authenticated.json`, `shortenPrivateUrl.json`, `shortenPublicUrl.json`, `shortenPrivateUrl.invalidToken.json`, `redirectUrl.json`).
 - `template.yaml` — SAM template defining the application's AWS resources (Lambda functions, DynamoDB table, HTTP API).
 - `samconfig.toml` — saved CLI defaults (stack name `tylink`, `CAPABILITY_IAM`, etc.) so most commands below need no extra flags.
 - `docs/` — project plans (`plans/`), technical-decision records (`technical_decisions/`), and learning notes (`learning/`). Start at `docs/plans/00-overview.md` for full project context.
@@ -37,7 +37,7 @@ followed by `: ` and a description:
 
 ```
 feature: add login endpoint
-fix(decode): handle malformed short codes
+fix(redirect): handle malformed short codes
 docs: update README
 ```
 

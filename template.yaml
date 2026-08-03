@@ -131,21 +131,26 @@ Resources:
             Auth:
               Authorizer: ExtractTokenAuthorizer
 
-  DecodeUrlFunction:
+  RedirectUrlFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/
-      Handler: com.tylink.features.decode.DecodeUrlHandler::handleRequest
+      Handler: com.tylink.features.redirect.RedirectUrlHandler::handleRequest
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref UrlTable
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref UrlTable
       Events:
-        DecodeUrl:
+        RedirectUrl:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /v1/urls/{shortCode}
             Method: get
+            Auth:
+              Authorizer: ExtractTokenAuthorizer
 
 Outputs:
   HttpApiUrl:
@@ -154,8 +159,8 @@ Outputs:
   ShortenUrlApi:
     Description: "API Gateway endpoint URL for the shorten-URL route"
     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls"
-  DecodeUrlApi:
-    Description: "API Gateway endpoint URL for the decode-URL route"
+  RedirectUrlApi:
+    Description: "API Gateway endpoint URL for the redirect-URL route"
     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls/{shortCode}"
   ShortenUrlFunction:
     Description: "Shorten URL Lambda Function ARN"
@@ -163,12 +168,12 @@ Outputs:
   ShortenUrlFunctionIamRole:
     Description: "Implicit IAM Role created for the Shorten URL function"
     Value: !GetAtt ShortenUrlFunctionRole.Arn
-  DecodeUrlFunction:
-    Description: "Decode URL Lambda Function ARN"
-    Value: !GetAtt DecodeUrlFunction.Arn
-  DecodeUrlFunctionIamRole:
-    Description: "Implicit IAM Role created for the Decode URL function"
-    Value: !GetAtt DecodeUrlFunctionRole.Arn
+  RedirectUrlFunction:
+    Description: "Redirect URL Lambda Function ARN"
+    Value: !GetAtt RedirectUrlFunction.Arn
+  RedirectUrlFunctionIamRole:
+    Description: "Implicit IAM Role created for the Redirect URL function"
+    Value: !GetAtt RedirectUrlFunctionRole.Arn
   ExtractTokenAuthorizerFunction:
     Description: "Extract-Token Authorizer Lambda Function ARN"
     Value: !GetAtt ExtractTokenAuthorizerFunction.Arn

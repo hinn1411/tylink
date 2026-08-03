@@ -7,13 +7,13 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 import com.tylink.auth.AuthUtils;
 import com.tylink.features.shorten.model.ShortenUrlRequest;
 import com.tylink.features.shorten.util.LongUrlValidator;
-import com.tylink.features.shorten.util.ShortUrlGenerator;
 import com.tylink.model.ShortUrl;
 import com.tylink.model.Visibility;
 import com.tylink.repository.DynamoDbUrlRepository;
 import com.tylink.repository.UrlRepository;
 import com.tylink.repository.UrlRepositoryException;
 import com.tylink.util.RequestUtils;
+import com.tylink.util.ShortCodeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -74,7 +74,7 @@ public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, 
     }
 
     private APIGatewayV2HTTPResponse createUrl(String longUrl, String ownerId, Visibility visibility) {
-        ShortUrl shortUrl = ShortUrl.create(ShortUrlGenerator.generate(), longUrl, ownerId, visibility);
+        ShortUrl shortUrl = ShortUrl.create(ShortCodeUtils.generate(), longUrl, ownerId, visibility);
         try {
             urlRepository.save(shortUrl);
         } catch (UrlRepositoryException e) {
