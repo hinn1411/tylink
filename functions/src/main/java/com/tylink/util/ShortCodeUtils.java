@@ -25,10 +25,6 @@ public final class ShortCodeUtils {
                 .collect(Collectors.joining());
     }
 
-    /**
-     * Returns true if shortCode has the exact shape generate() produces:
-     * SHORT_CODE_LENGTH characters, every one from BASE62_ALPHABET.
-     */
     public static boolean isValid(String shortCode) {
         if (StringUtils.isBlank(shortCode) || shortCode.length() != SHORT_CODE_LENGTH) {
             return false;

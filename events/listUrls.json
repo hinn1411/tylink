@@ -1,0 +1,41 @@
+{
+  "version": "2.0",
+  "routeKey": "GET /v1/urls",
+  "rawPath": "/v1/urls",
+  "rawQueryString": "limit=10",
+  "headers": {
+    "user-agent": "Custom User Agent String"
+  },
+  "queryStringParameters": {
+    "limit": "1",
+    "cursor": ""
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "1234567890",
+    "domainName": "1234567890.execute-api.us-east-1.amazonaws.com",
+    "domainPrefix": "1234567890",
+    "http": {
+      "method": "GET",
+      "path": "/v1/urls",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "Custom User Agent String"
+    },
+    "requestId": "e8cf1bd8-9d83-33f3-bc63-b5a0fgbeddgg",
+    "routeKey": "GET /v1/urls",
+    "stage": "$default",
+    "time": "09/Apr/2015:12:34:56 +0000",
+    "timeEpoch": 1428582896000,
+    "authorizer": {
+      "jwt": {
+        "claims": {
+          "sub": "22222222-2222-2222-2222-222222222222",
+          "email": "user@example.com"
+        },
+        "scopes": null
+      }
+    }
+  },
+  "isBase64Encoded": false
+}
