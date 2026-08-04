@@ -32,14 +32,34 @@ committing to it:
   list-urls feature diff) — a small adjacent change touched while doing the branch's main
   work is not a mismatch.
 
-If there's a mismatch (including the master/main case):
-- Do **not** commit to the current branch.
-- Create and switch to a new branch from the current `HEAD`:
-  `git checkout -b <type>/<kebab-case-description>`, using the same type vocabulary as
-  commit messages (below) and a short topic inferred from the diff, matching existing
-  naming style (e.g. `feature/list-user-urls`).
-- Tell the user a mismatch was detected and which new branch was created, before
-  proceeding with the rest of this skill on that new branch.
+If there's a mismatch (including the master/main case), do **not** commit to the current
+branch — create a new one, naming it `<type>/<kebab-case-description>` (same type
+vocabulary as commit messages below, short topic inferred from the diff, matching existing
+naming style, e.g. `feature/list-user-urls`). Where you branch *from* matters — branching
+from the wrong place drags unrelated commits into the new branch's history and PR (this
+happened for real: a branch cut from a feature branch that was 14 commits ahead of master
+pulled in 4 of those commits, turning a 1-file skill-doc change into a PR showing 5 commits
+and 29 files changed). Pick the base like this:
+
+- Check whether the current branch has commits `master` doesn't have yet:
+  `git log master..HEAD --oneline`.
+- **Empty** (current branch is even with master, nothing to drag along): branch straight
+  from current `HEAD` — `git checkout -b <type>/<description>`.
+- **Non-empty, or the current branch is `master`/`main` itself**: branching from `HEAD`
+  (or committing straight to a stale local master) would leak those commits into the new
+  branch. Instead, sync a fresh base:
+  1. If there are uncommitted changes, `git stash push -u -m "<short description>"` first —
+     switching branches needs a clean-enough working tree.
+  2. `git checkout master`
+  3. `git pull` to bring local master up to date with `origin/master`.
+  4. `git checkout -b <type>/<description>` (now based on fresh master).
+  5. If a stash was created, `git stash pop` to restore the change onto the new branch. If
+     the pop reports a conflict, stop and show it to the user — do not resolve it silently.
+
+Tell the user a mismatch was detected, which new branch was created, and — if the
+master-sync path was taken — that it was rebased onto latest master to avoid dragging in
+unrelated commits (name them if any), before proceeding with the rest of this skill on that
+new branch.
 
 If there's no mismatch, proceed on the current branch as-is.
 
@@ -79,5 +99,6 @@ Run `git commit -m "type: description"`. The pre-commit hooks run automatically:
 
 Tell the user the final commit hash, the branch pushed, and a one-line summary of what
 changed. If step 2 created a new branch, call that out explicitly (old branch, new branch,
-why). Do not open a pull/merge request as part of this skill — that step is handled
+why), including whether it was rebased onto fresh master to avoid dragging in unrelated
+commits. Do not open a pull/merge request as part of this skill — that step is handled
 separately.
