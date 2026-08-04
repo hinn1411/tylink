@@ -44,13 +44,15 @@ hook (`.pre-commit-config.yaml`).
 
 ```
 com.tylink.auth              — ExtractTokenAuthorizerHandler, CognitoJwtVerifier, AuthUtils
-com.tylink.features.<name>   — one package per Lambda-backed feature (shorten, redirect),
+com.tylink.features.<name>   — one package per Lambda-backed feature (shorten, redirect, list),
                                 each with its own Handler and any feature-local model/util classes
 com.tylink.model             — ShortUrl, Visibility, UrlStatus — shared across features
-com.tylink.repository        — UrlRepository interface + DynamoDbUrlRepository impl + attribute names
+com.tylink.repository        — UrlRepository interface + DynamoDbUrlRepository impl + attribute
+                                names + pagination types (UrlPage, CursorCodec, InvalidCursorException)
 com.tylink.util              — RequestUtils (JSON body parsing / API Gateway response helpers),
                                 ShortCodeUtils (short-code generation + validation, shared by
-                                the shorten and redirect features)
+                                the shorten and redirect features), TimestampUtils (fixed-width
+                                nanosecond timestamps, sortable as plain strings)
 ```
 
 Handlers follow a fixed constructor pattern for testability: a public no-arg constructor
@@ -60,65 +62,48 @@ See `ShortenUrlHandler` for the canonical example.
 
 ### Request flow and the authorizer's role
 
-Every route sits behind `ExtractTokenAuthorizerFunction`, a single REQUEST-type Lambda
-authorizer shared by the whole `HttpApi` (see the comment block in `template.yaml`). It
-**never denies a request** — `isAuthorized` is hardcoded `true` — it only verifies an
-`Authorization` header if present and passes the verified Cognito `sub` through as `ownerId`
-in the authorizer context; an anonymous or invalid-token caller just gets no `ownerId`. This
-is the only way to have some routes support both authenticated and anonymous callers on HTTP
-API — a native JWT authorizer is all-or-nothing per route and would reject anonymous callers
-outright (`docs/technical_decisions/05-custom-jwt-authorizer.md`).
-
-Downstream handlers never see a raw JWT — they read the caller's identity via
-`AuthUtils.extractOwnerId(input)`, which pulls `ownerId` out of
-`requestContext.authorizer.lambda`. A null return means anonymous.
+Two `HttpApi` authorizers, chosen per route by whether anonymous callers must be supported:
+`ExtractTokenAuthorizerFunction` (custom, never denies) for routes needing both anonymous and
+authenticated callers (`create`, `redirect`), and `NativeJwtAuthorizer` (native JWT) for routes
+that always require a caller (`list`). Handlers never see a raw JWT — they read identity via
+`AuthUtils.extractOwnerId(input)` (null means anonymous) or `extractOwnerIdFromJwtClaims(input)`
+depending on which authorizer sits in front of them. See
+`docs/technical_decisions/05-custom-jwt-authorizer.md` for why both exist.
 
 ### Data model — single DynamoDB table, one item type
 
-`UrlTable` has one item shape covering redirect, private-link ownership, and per-user listing;
-see `docs/technical_decisions/04-dynamodb-access-patterns.md` for the full rationale.
+`UrlTable` has one item shape covering redirect, ownership checks, and per-user listing:
 
-- `PK=URL#<shortCode>`, `SK=METADATA` — `GetItem` for the hot redirect/decode path. Short code
-  is a random Base62 string (`ShortCodeUtils.generate()`), not a counter, to avoid a hot partition.
-- `GSI1_PK=USER#<ownerId>`, `GSI1_SK=URL#<createdAt>#<shortCode>` — `Query` for "list a user's
-  URLs", chronological by construction. **Only written when the creator was authenticated** —
-  anonymous `PUBLIC` creates omit `ownerId`/`GSI1_PK`/`GSI1_SK` entirely, so such a link is
-  structurally invisible to the by-user listing (see `DynamoDbUrlRepository.toItem`).
-- `visibility` (`PUBLIC`/`PRIVATE`) is a plain attribute, not a key — authorization is a
-  runtime check (does caller's `ownerId` match the item's?), not something key design can
-  express. A mismatch must return **404, never 403**, so a probing caller can't distinguish
-  "not yours" from "doesn't exist".
-- `PRIVATE` visibility requires an authenticated creator at write time (there must be a real
-  `ownerId` to check against later); `PUBLIC` does not. `ShortenUrlHandler` enforces this
-  before ever touching the repository.
+- `PK=URL#<shortCode>`, `SK=METADATA` — primary key, `GetItem` for redirect/decode.
+- `GSI1_PK=USER#<ownerId>`, `GSI1_SK=URL#<createdAt>#<shortCode>` — `Query` for listing a user's
+  URLs; present only when the creator was authenticated.
+- `visibility` (`PUBLIC`/`PRIVATE`) and `status` (`ACTIVE`/`DELETED`) are plain attributes, not
+  keys.
+
+See `docs/technical_decisions/04-dynamodb-access-patterns.md` for the access-pattern rationale
+and `08-list-urls-pagination-tradeoffs.md` for how `list` queries this GSI and its pagination
+trade-offs.
 
 ### Implementation status
 
-`ShortenUrlHandler` is fully wired (validates input, generates code, writes via
-`UrlRepository`). `RedirectUrlHandler` is fully wired too (validates the short code shape,
-looks up the item, enforces PRIVATE ownership, returns 404/410/307). Don't assume update,
-delete, or listing are implemented; check the handler before relying on any of them.
+`ShortenUrlHandler`, `RedirectUrlHandler`, and `ListUrlsHandler` are fully wired. Update and
+delete are not implemented — check the handler before relying on either.
 
 ### Validation and response conventions
 
-- `LongUrlValidator.validate()` does strict `java.net.URI` parsing + an `{http, https}` scheme
-  allowlist rather than a denylist — this incidentally blocks XSS/header-injection payloads as
-  a side effect of RFC 3986 strictness, not via pattern matching. See
+- `LongUrlValidator.validate()` — strict URI validation; see
   `docs/technical_decisions/07-longurl-validation.md` before adding denylist-style checks.
-- `RequestUtils.parseBody`/`jsonResponse` are the only place handlers touch Jackson or build an
-  `APIGatewayV2HTTPResponse` — keep new handlers consistent with this rather than
-  hand-rolling JSON.
-- `ShortCodeUtils.generate()`/`isValid()` deliberately live in one class with the alphabet and
-  length kept `private` — they used to be two classes (one per feature) sharing `public`
-  constants, which leaked implementation detail across package boundaries for no reason since
-  only these two methods ever needed them.
+- `RequestUtils.parseBody`/`jsonResponse` — the only place handlers touch Jackson or build an
+  `APIGatewayV2HTTPResponse`; keep new handlers consistent with this rather than hand-rolling JSON.
+- `ShortCodeUtils.generate()`/`isValid()` — code generation + validation, shared by shorten and
+  redirect.
 
 ### Logging
 
-`@Logging` (Powertools) annotations require the `aspectj-maven-plugin` compile-time weaving
-configured in `functions/pom.xml` — a plain `javac` won't activate them. Runtime log level is
-controlled by `POWERTOOLS_LOG_LEVEL` in `template.yaml`, not `log4j2.xml` (which is a fallback
-only); see `docs/technical_decisions/02-app-log-configuration.md`.
+`@Logging` (Powertools) requires `aspectj-maven-plugin` compile-time weaving
+(`functions/pom.xml`) — plain `javac` won't activate it. Log level is set via
+`POWERTOOLS_LOG_LEVEL` in `template.yaml`, not `log4j2.xml`. See
+`docs/technical_decisions/02-app-log-configuration.md`.
 
 ### Testing
 
