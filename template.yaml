@@ -81,6 +81,13 @@ Resources:
             Identity:
               Headers:
                 - Authorization
+          # Native authorizer, only accepts valid token. Otherwise, rejects all.
+          NativeJwtAuthorizer:
+            JwtConfiguration:
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+              audience:
+                - !Ref UserPoolClient
+            IdentitySource: "$request.header.Authorization"
 
   UrlTable:
     Type: AWS::DynamoDB::Table
@@ -152,6 +159,27 @@ Resources:
             Auth:
               Authorizer: ExtractTokenAuthorizer
 
+  ListUrlsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: com.tylink.features.list.ListUrlsHandler::handleRequest
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref UrlTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UrlTable
+      Events:
+        ListUrls:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/urls
+            Method: get
+            Auth:
+              Authorizer: NativeJwtAuthorizer
+
 Outputs:
   HttpApiUrl:
     Description: "Base URL for the tylink HTTP API"
@@ -174,6 +202,15 @@ Outputs:
   RedirectUrlFunctionIamRole:
     Description: "Implicit IAM Role created for the Redirect URL function"
     Value: !GetAtt RedirectUrlFunctionRole.Arn
+  ListUrlsApi:
+    Description: "API Gateway endpoint URL for the list-URLs route"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls"
+  ListUrlsFunction:
+    Description: "List URLs Lambda Function ARN"
+    Value: !GetAtt ListUrlsFunction.Arn
+  ListUrlsFunctionIamRole:
+    Description: "Implicit IAM Role created for the List URLs function"
+    Value: !GetAtt ListUrlsFunctionRole.Arn
   ExtractTokenAuthorizerFunction:
     Description: "Extract-Token Authorizer Lambda Function ARN"
     Value: !GetAtt ExtractTokenAuthorizerFunction.Arn

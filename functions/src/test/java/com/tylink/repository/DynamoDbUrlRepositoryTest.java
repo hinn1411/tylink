@@ -12,8 +12,11 @@ import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,6 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -127,6 +132,7 @@ class DynamoDbUrlRepositoryTest {
     @Test
     void findByShortCodeMapsItemBackToShortUrlIncludingOwnerPrefixStrip() {
         Map<String, AttributeValue> item = new HashMap<>();
+        item.put(ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"));
         item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
         item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PRIVATE"));
         item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("ACTIVE"));
@@ -151,6 +157,7 @@ class DynamoDbUrlRepositoryTest {
     @Test
     void findByShortCodeReturnsNullOwnerIdWhenAbsent() {
         Map<String, AttributeValue> item = new HashMap<>();
+        item.put(ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"));
         item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
         item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PUBLIC"));
         item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("ACTIVE"));
@@ -167,6 +174,7 @@ class DynamoDbUrlRepositoryTest {
     @Test
     void findByShortCodeParsesDeletedStatus() {
         Map<String, AttributeValue> item = new HashMap<>();
+        item.put(ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"));
         item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
         item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PUBLIC"));
         item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("DELETED"));
@@ -190,6 +198,179 @@ class DynamoDbUrlRepositoryTest {
         UrlRepositoryException thrown =
                 assertThrows(UrlRepositoryException.class, () -> repository.findByShortCode("abc1234"));
         assertSame(cause, thrown.getCause());
+    }
+
+    private static DynamoDbUrlRepository repository(DynamoDbClient dynamoDb) {
+        return new DynamoDbUrlRepository(dynamoDb, TABLE_NAME);
+    }
+
+    private static DynamoDbUrlRepository repositoryReturningEmptyPage(DynamoDbClient dynamoDb) {
+        when(dynamoDb.query(any(QueryRequest.class))).thenReturn(QueryResponse.builder().items(List.of()).build());
+        return repository(dynamoDb);
+    }
+
+    private static QueryRequest capturedQueryRequest(DynamoDbClient dynamoDb) {
+        ArgumentCaptor<QueryRequest> captor = ArgumentCaptor.forClass(QueryRequest.class);
+        verify(dynamoDb).query(captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    void listByOwner_ownerId_queriesGsi1WithAliasedOwnerPrefixedKeyCondition() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        DynamoDbUrlRepository repository = repositoryReturningEmptyPage(dynamoDb);
+
+        repository.listByOwner("u1", 20, null);
+
+        QueryRequest request = capturedQueryRequest(dynamoDb);
+        assertEquals(TABLE_NAME, request.tableName());
+        assertEquals(ShortUrlAttributes.GSI1_INDEX_NAME, request.indexName());
+        assertEquals("#gsi1_pk = :ownerId", request.keyConditionExpression());
+        assertEquals(ShortUrlAttributes.GSI1_PK, request.expressionAttributeNames().get("#gsi1_pk"));
+        assertEquals("USER#u1", request.expressionAttributeValues().get(":ownerId").s());
+    }
+
+    @Test
+    void listByOwner_ownerId_filtersOutDeletedItemsOnly() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        DynamoDbUrlRepository repository = repositoryReturningEmptyPage(dynamoDb);
+
+        repository.listByOwner("u1", 20, null);
+
+        QueryRequest request = capturedQueryRequest(dynamoDb);
+        assertEquals("#status <> :deleted", request.filterExpression());
+        assertEquals("DELETED", request.expressionAttributeValues().get(":deleted").s());
+        assertFalse(request.expressionAttributeValues().containsKey(":visibility"));
+        assertFalse(request.expressionAttributeNames().containsKey("#visibility"));
+    }
+
+    @Test
+    void listByOwner_ownerId_setsScanIndexForwardFalseForNewestFirst() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        DynamoDbUrlRepository repository = repositoryReturningEmptyPage(dynamoDb);
+
+        repository.listByOwner("u1", 20, null);
+
+        QueryRequest request = capturedQueryRequest(dynamoDb);
+        assertFalse(request.scanIndexForward());
+    }
+
+    @Test
+    void listByOwner_limitProvided_appliesLimitToQuery() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        DynamoDbUrlRepository repository = repositoryReturningEmptyPage(dynamoDb);
+
+        repository.listByOwner("u1", 5, null);
+
+        QueryRequest request = capturedQueryRequest(dynamoDb);
+        assertEquals(5, request.limit().intValue());
+    }
+
+    @Test
+    void listByOwner_nullCursor_omitsExclusiveStartKey() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        DynamoDbUrlRepository repository = repositoryReturningEmptyPage(dynamoDb);
+
+        repository.listByOwner("u1", 20, null);
+
+        QueryRequest request = capturedQueryRequest(dynamoDb);
+        assertFalse(request.hasExclusiveStartKey());
+    }
+
+    @Test
+    void listByOwner_cursorFromPreviousPage_passesDecodedExclusiveStartKey() {
+        Map<String, AttributeValue> lastEvaluatedKey = Map.of(
+                ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"),
+                ShortUrlAttributes.SK, AttributeValue.fromS("METADATA"),
+                ShortUrlAttributes.GSI1_PK, AttributeValue.fromS("USER#u1"),
+                ShortUrlAttributes.GSI1_SK, AttributeValue.fromS("URL#2026-01-01T00:00:00.000000000Z#abc1234"));
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        when(dynamoDb.query(any(QueryRequest.class)))
+                .thenReturn(QueryResponse.builder().items(List.of()).lastEvaluatedKey(lastEvaluatedKey).build());
+        DynamoDbUrlRepository repository = repository(dynamoDb);
+
+        UrlPage firstPage = repository.listByOwner("u1", 20, null);
+        when(dynamoDb.query(any(QueryRequest.class)))
+                .thenReturn(QueryResponse.builder().items(List.of()).build());
+        repository.listByOwner("u1", 20, firstPage.nextCursor());
+
+        ArgumentCaptor<QueryRequest> captor = ArgumentCaptor.forClass(QueryRequest.class);
+        verify(dynamoDb, times(2)).query(captor.capture());
+        assertEquals(lastEvaluatedKey, captor.getAllValues().get(1).exclusiveStartKey());
+    }
+
+    @Test
+    void listByOwner_queryReturnsItems_mapsResultsToShortUrl() {
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put(ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"));
+        item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
+        item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PRIVATE"));
+        item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("ACTIVE"));
+        item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00.000000000Z"));
+        item.put(ShortUrlAttributes.OWNER_ID, AttributeValue.fromS("USER#u1"));
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        when(dynamoDb.query(any(QueryRequest.class))).thenReturn(QueryResponse.builder().items(List.of(item)).build());
+        DynamoDbUrlRepository repository = repository(dynamoDb);
+
+        UrlPage page = repository.listByOwner("u1", 20, null);
+
+        assertEquals(1, page.items().size());
+        ShortUrl shortUrl = page.items().get(0);
+        assertEquals("abc1234", shortUrl.shortCode());
+        assertEquals("https://example.com/x", shortUrl.longUrl());
+        assertEquals("u1", shortUrl.ownerId());
+        assertEquals(Visibility.PRIVATE, shortUrl.visibility());
+        assertEquals(UrlStatus.ACTIVE, shortUrl.status());
+    }
+
+    @Test
+    void listByOwner_noLastEvaluatedKey_returnsNullNextCursor() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        DynamoDbUrlRepository repository = repositoryReturningEmptyPage(dynamoDb);
+
+        UrlPage page = repository.listByOwner("u1", 20, null);
+
+        assertNull(page.nextCursor());
+    }
+
+    @Test
+    void listByOwner_lastEvaluatedKeyPresent_returnsEncodedNextCursor() {
+        Map<String, AttributeValue> lastEvaluatedKey = Map.of(
+                ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"),
+                ShortUrlAttributes.SK, AttributeValue.fromS("METADATA"),
+                ShortUrlAttributes.GSI1_PK, AttributeValue.fromS("USER#u1"),
+                ShortUrlAttributes.GSI1_SK, AttributeValue.fromS("URL#2026-01-01T00:00:00.000000000Z#abc1234"));
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        when(dynamoDb.query(any(QueryRequest.class)))
+                .thenReturn(QueryResponse.builder().items(List.of()).lastEvaluatedKey(lastEvaluatedKey).build());
+        DynamoDbUrlRepository repository = repository(dynamoDb);
+
+        UrlPage page = repository.listByOwner("u1", 20, null);
+
+        assertFalse(page.nextCursor() == null || page.nextCursor().isBlank());
+    }
+
+    @Test
+    void listByOwner_dynamoDbThrowsSdkException_wrapsAsUrlRepositoryException() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        RuntimeException cause = DynamoDbException.builder().message("service unavailable").build();
+        when(dynamoDb.query(any(QueryRequest.class))).thenThrow(cause);
+        DynamoDbUrlRepository repository = repository(dynamoDb);
+
+        UrlRepositoryException thrown =
+                assertThrows(UrlRepositoryException.class, () -> repository.listByOwner("u1", 20, null));
+
+        assertSame(cause, thrown.getCause());
+    }
+
+    @Test
+    void listByOwner_malformedCursor_throwsInvalidCursorExceptionWithoutQueryingDynamoDb() {
+        DynamoDbClient dynamoDb = mock(DynamoDbClient.class);
+        DynamoDbUrlRepository repository = repository(dynamoDb);
+
+        assertThrows(InvalidCursorException.class, () -> repository.listByOwner("u1", 20, "not-valid-base64!!!"));
+
+        verify(dynamoDb, never()).query(any(QueryRequest.class));
     }
 
     private Map<String, AttributeValue> save(ShortUrl shortUrl) {

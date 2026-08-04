@@ -30,6 +30,10 @@ public final class RequestUtils {
     }
 
     public static APIGatewayV2HTTPResponse jsonResponse(int statusCode, Map<String, String> body) {
+        return jsonResponse(statusCode, (Object) body);
+    }
+
+    public static APIGatewayV2HTTPResponse jsonResponse(int statusCode, Object body) {
         try {
             return APIGatewayV2HTTPResponse.builder()
                     .withStatusCode(statusCode)

@@ -11,6 +11,7 @@ public final class ShortUrlAttributes {
     public static final String OWNER_ID = "ownerId";
     public static final String GSI1_PK = "GSI1_PK";
     public static final String GSI1_SK = "GSI1_SK";
+    public static final String GSI1_INDEX_NAME = "GSI1";
 
     public static final String SK_METADATA = "METADATA";
 
