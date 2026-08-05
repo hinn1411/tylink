@@ -11,9 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ShortUrlTest {
 
+    private static ShortUrl newShortUrl() {
+        return ShortUrl.create("abc1234", "https://example.com/x", "u1", Visibility.PRIVATE);
+    }
+
     @Test
-    void createSetsAllFieldsAndTimestamp() {
-        ShortUrl shortUrl = ShortUrl.create("abc1234", "https://example.com/x", "u1", Visibility.PRIVATE);
+    void create_validInputs_setsAllFieldsAndTimestamp() {
+        ShortUrl shortUrl = newShortUrl();
 
         assertEquals("abc1234", shortUrl.shortCode());
         assertEquals("https://example.com/x", shortUrl.longUrl());
@@ -24,8 +28,8 @@ class ShortUrlTest {
     }
 
     @Test
-    void createdAtIsFixedWidthNanosecondPrecisionAndParseable() {
-        ShortUrl shortUrl = ShortUrl.create("abc1234", "https://example.com/x", "u1", Visibility.PRIVATE);
+    void create_validInputs_createdAtIsFixedWidthNanosecondPrecisionAndParseable() {
+        ShortUrl shortUrl = newShortUrl();
 
         assertTrue(shortUrl.createdAt().matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{9}Z"));
         assertDoesNotThrow(() -> Instant.parse(shortUrl.createdAt()));

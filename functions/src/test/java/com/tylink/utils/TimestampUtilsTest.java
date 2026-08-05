@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TimestampUtilsTest {
 
     @Test
-    void nowIsFixedWidthNanosecondPrecisionAndParseable() {
+    void now_called_isFixedWidthNanosecondPrecisionAndParseable() {
         String timestamp = TimestampUtils.now();
 
         assertTrue(timestamp.matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{9}Z"));
@@ -18,7 +18,7 @@ class TimestampUtilsTest {
     }
 
     @Test
-    void consecutiveTimestampsAreLexicographicallySortable() {
+    void now_calledConsecutively_producesLexicographicallySortableTimestamps() {
         String first = TimestampUtils.now();
         String second = TimestampUtils.now();
 

@@ -50,11 +50,16 @@ class ShortenUrlHandlerTest {
                 .build();
     }
 
-    @Test
-    void createsPublicUrlAnonymouslyWhenNoAuthenticatedCaller() {
-        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
-                .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}")
+    private static APIGatewayV2HTTPEvent anonymousEventWithBody(String body) {
+        return APIGatewayV2HTTPEvent.builder()
+                .withBody(body)
                 .build();
+    }
+
+    @Test
+    void handleRequest_anonymousCallerNoVisibilitySpecified_createsPublicUrl() {
+        APIGatewayV2HTTPEvent event =
+                anonymousEventWithBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}");
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
 
@@ -67,10 +72,9 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
-    void rejectsPrivateUrlWithNoAuthenticatedCaller() {
-        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
-                .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\", \"visibility\": \"PRIVATE\"}")
-                .build();
+    void handleRequest_anonymousCallerRequestsPrivateVisibility_returns401() {
+        APIGatewayV2HTTPEvent event = anonymousEventWithBody(
+                "{\"longUrl\": \"https://example.com/some/very/long/path\", \"visibility\": \"PRIVATE\"}");
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
 
@@ -78,7 +82,7 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
-    void createsPublicUrlAndTagsItWithOwnerFromAuthorizerContext() {
+    void handleRequest_authenticatedCallerRequestsPublicVisibility_tagsUrlWithOwnerId() {
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/some/very/long/path\", \"visibility\": \"PUBLIC\"}",
                 "11111111-1111-1111-1111-111111111111");
@@ -95,7 +99,7 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
-    void createsPrivateUrlOwnedByCaller() {
+    void handleRequest_authenticatedCallerRequestsPrivateVisibility_createsUrlOwnedByCaller() {
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/bobs-private-dashboard\", \"visibility\": \"PRIVATE\"}",
                 "22222222-2222-2222-2222-222222222222");
@@ -112,7 +116,7 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
-    void rejectsMissingLongUrl() {
+    void handleRequest_missingLongUrl_returns400() {
         APIGatewayV2HTTPEvent event = eventWithOwnerId("{}", "11111111-1111-1111-1111-111111111111");
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
@@ -121,7 +125,7 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
-    void rejectsInvalidVisibility() {
+    void handleRequest_invalidVisibility_returns400() {
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/x\", \"visibility\": \"SECRET\"}",
                 "11111111-1111-1111-1111-111111111111");
@@ -132,10 +136,8 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
-    void rejectsNonHttpProtocol() {
-        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
-                .withBody("{\"longUrl\": \"javascript:alert(1)\"}")
-                .build();
+    void handleRequest_nonHttpProtocolLongUrl_returns400() {
+        APIGatewayV2HTTPEvent event = anonymousEventWithBody("{\"longUrl\": \"javascript:alert(1)\"}");
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
 
@@ -143,10 +145,9 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
-    void rejectsUrlWithHtmlPayload() {
-        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
-                .withBody("{\"longUrl\": \"http://example.com/<script>alert(1)</script>\"}")
-                .build();
+    void handleRequest_longUrlWithHtmlPayload_returns400() {
+        APIGatewayV2HTTPEvent event =
+                anonymousEventWithBody("{\"longUrl\": \"http://example.com/<script>alert(1)</script>\"}");
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
 
@@ -154,10 +155,9 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
-    void rejectsUrlWithControlCharacters() {
-        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
-                .withBody("{\"longUrl\": \"http://example.com/\\r\\nSet-Cookie: evil=1\"}")
-                .build();
+    void handleRequest_longUrlWithControlCharacters_returns400() {
+        APIGatewayV2HTTPEvent event =
+                anonymousEventWithBody("{\"longUrl\": \"http://example.com/\\r\\nSet-Cookie: evil=1\"}");
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
 
@@ -165,11 +165,9 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
-    void acceptsUrlWithQueryParametersAndFragment() {
+    void handleRequest_longUrlWithQueryParametersAndFragment_savesUrlUnchanged() {
         String longUrl = "https://example.com/path?foo=bar&baz=qux#section";
-        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
-                .withBody("{\"longUrl\": \"" + longUrl + "\"}")
-                .build();
+        APIGatewayV2HTTPEvent event = anonymousEventWithBody("{\"longUrl\": \"" + longUrl + "\"}");
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
 
@@ -181,13 +179,11 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
-    void returns500WhenUrlRepositorySaveFails() {
+    void handleRequest_repositorySaveThrows_returns500() {
         doThrow(new UrlRepositoryException("service unavailable", new RuntimeException("boom")))
                 .when(urlRepository).save(any(ShortUrl.class));
-
-        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
-                .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}")
-                .build();
+        APIGatewayV2HTTPEvent event =
+                anonymousEventWithBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}");
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
 
