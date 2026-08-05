@@ -8,7 +8,7 @@
 - **Strict RFC 3986 URI parsing + protocol allowlist (chosen).** `java.net.URI`'s single-arg constructor is a strict syntax parser: unescaped `<`, `>`, `"`, spaces, and other HTML/script metacharacters are illegal in a URI and throw `URISyntaxException`. Combined with an explicit reject on ISO control characters (CR/LF/NUL) and a `{http, https}` scheme allowlist, this blocks XSS-shaped payloads, non-redirectable protocols (`javascript:`, `data:`, `file:`, ...), and future `Location`-header CRLF injection, without a new dependency.
 
 ## Decision
-Added `LongUrlValidator` (`com.tylink.features.shorten.util`), used by `ShortenUrlHandler` after the existing blank check:
+Added `LongUrlValidator` (`com.tylink.features.shorten.utils`), used by `ShortenUrlHandler` after the existing blank check:
 
 1. Trim whitespace; reject if resulting length exceeds 2048 characters.
 2. Reject if it contains any ISO control character (blocks CR/LF/NUL header-injection payloads).

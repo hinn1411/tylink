@@ -5,14 +5,14 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 import com.tylink.auth.AuthUtils;
-import com.tylink.model.ShortUrl;
-import com.tylink.model.UrlStatus;
-import com.tylink.model.Visibility;
-import com.tylink.repository.DynamoDbUrlRepository;
+import com.tylink.models.ShortUrl;
+import com.tylink.models.UrlStatus;
+import com.tylink.models.Visibility;
+import com.tylink.repository.dynamodb.DynamoDbUrlRepository;
 import com.tylink.repository.UrlRepository;
 import com.tylink.repository.UrlRepositoryException;
-import com.tylink.util.RequestUtils;
-import com.tylink.util.ShortCodeUtils;
+import com.tylink.utils.RequestUtils;
+import com.tylink.utils.ShortCodeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -24,7 +24,6 @@ import java.util.Optional;
 public class RedirectUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
 
     private static final Logger log = LogManager.getLogger(RedirectUrlHandler.class);
-    private static final Map<String, String> NOT_FOUND_BODY = Map.of("message", "Short url not found");
 
     private final UrlRepository urlRepository;
 
@@ -46,7 +45,7 @@ public class RedirectUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent,
 
         if (!ShortCodeUtils.isValid(shortCode)) {
             log.warn("Rejected redirect request: malformed shortCode={}", shortCode);
-            return notFound();
+            return RequestUtils.notFound();
         }
 
         ShortUrl shortUrl;
@@ -59,14 +58,14 @@ public class RedirectUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent,
 
         if (shortUrl == null) {
             log.info("shortCode={} not found", shortCode);
-            return notFound();
+            return RequestUtils.notFound();
         }
 
         String ownerId = AuthUtils.extractOwnerId(input);
         if (shortUrl.visibility() == Visibility.PRIVATE
                 && (ownerId == null || !ownerId.equals(shortUrl.ownerId()))) {
             log.warn("Rejected redirect request: shortCode={} is PRIVATE, caller is not the owner", shortCode);
-            return notFound();
+            return RequestUtils.notFound();
         }
 
         if (shortUrl.status() == UrlStatus.DELETED) {
@@ -80,9 +79,5 @@ public class RedirectUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent,
                 .withHeaders(Map.of("Location", shortUrl.longUrl()))
                 .withBody("")
                 .build();
-    }
-
-    private static APIGatewayV2HTTPResponse notFound() {
-        return RequestUtils.jsonResponse(404, NOT_FOUND_BODY);
     }
 }

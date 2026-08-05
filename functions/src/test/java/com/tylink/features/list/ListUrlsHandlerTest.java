@@ -2,11 +2,11 @@ package com.tylink.features.list;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
-import com.tylink.model.ShortUrl;
-import com.tylink.model.UrlStatus;
-import com.tylink.model.Visibility;
-import com.tylink.repository.InvalidCursorException;
-import com.tylink.repository.UrlPage;
+import com.tylink.models.ShortUrl;
+import com.tylink.models.UrlStatus;
+import com.tylink.models.Visibility;
+import com.tylink.repository.pagination.InvalidCursorException;
+import com.tylink.repository.pagination.UrlPage;
 import com.tylink.repository.UrlRepository;
 import com.tylink.repository.UrlRepositoryException;
 import org.junit.jupiter.api.BeforeEach;

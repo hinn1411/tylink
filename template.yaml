@@ -180,6 +180,27 @@ Resources:
             Auth:
               Authorizer: NativeJwtAuthorizer
 
+  DeleteUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: com.tylink.features.delete.DeleteUrlHandler::handleRequest
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref UrlTable
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref UrlTable
+      Events:
+        DeleteUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/urls/{shortCode}
+            Method: delete
+            Auth:
+              Authorizer: NativeJwtAuthorizer
+
 Outputs:
   HttpApiUrl:
     Description: "Base URL for the tylink HTTP API"
@@ -211,6 +232,15 @@ Outputs:
   ListUrlsFunctionIamRole:
     Description: "Implicit IAM Role created for the List URLs function"
     Value: !GetAtt ListUrlsFunctionRole.Arn
+  DeleteUrlApi:
+    Description: "API Gateway endpoint URL for the delete-URL route"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls/{shortCode}"
+  DeleteUrlFunction:
+    Description: "Delete URL Lambda Function ARN"
+    Value: !GetAtt DeleteUrlFunction.Arn
+  DeleteUrlFunctionIamRole:
+    Description: "Implicit IAM Role created for the Delete URL function"
+    Value: !GetAtt DeleteUrlFunctionRole.Arn
   ExtractTokenAuthorizerFunction:
     Description: "Extract-Token Authorizer Lambda Function ARN"
     Value: !GetAtt ExtractTokenAuthorizerFunction.Arn

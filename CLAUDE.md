@@ -45,11 +45,13 @@ hook (`.pre-commit-config.yaml`).
 ```
 com.tylink.auth              — ExtractTokenAuthorizerHandler, CognitoJwtVerifier, AuthUtils
 com.tylink.features.<name>   — one package per Lambda-backed feature (shorten, redirect, list),
-                                each with its own Handler and any feature-local model/util classes
-com.tylink.model             — ShortUrl, Visibility, UrlStatus — shared across features
-com.tylink.repository        — UrlRepository interface + DynamoDbUrlRepository impl + attribute
-                                names + pagination types (UrlPage, CursorCodec, InvalidCursorException)
-com.tylink.util              — RequestUtils (JSON body parsing / API Gateway response helpers),
+                                each with its own Handler and any feature-local models/utils classes
+com.tylink.models            — ShortUrl, Visibility, UrlStatus — shared across features
+com.tylink.repository        — UrlRepository interface + UrlRepositoryException (the contract);
+                                com.tylink.repository.dynamodb has the DynamoDB impl (DynamoDbUrlRepository,
+                                ShortUrlAttributes, package-private CursorCodec); com.tylink.repository.pagination
+                                has UrlPage + InvalidCursorException
+com.tylink.utils             — RequestUtils (JSON body parsing / API Gateway response helpers),
                                 ShortCodeUtils (short-code generation + validation, shared by
                                 the shorten and redirect features), TimestampUtils (fixed-width
                                 nanosecond timestamps, sortable as plain strings)

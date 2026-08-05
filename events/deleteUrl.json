@@ -1,0 +1,40 @@
+{
+  "version": "2.0",
+  "routeKey": "DELETE /v1/urls/{shortCode}",
+  "rawPath": "/v1/urls/NrMVqW2",
+  "rawQueryString": "",
+  "headers": {
+    "user-agent": "Custom User Agent String"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "1234567890",
+    "domainName": "1234567890.execute-api.us-east-1.amazonaws.com",
+    "domainPrefix": "1234567890",
+    "http": {
+      "method": "DELETE",
+      "path": "/v1/urls/NrMVqW2",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "Custom User Agent String"
+    },
+    "requestId": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef",
+    "routeKey": "DELETE /v1/urls/{shortCode}",
+    "stage": "$default",
+    "time": "09/Apr/2015:12:34:56 +0000",
+    "timeEpoch": 1428582896000,
+    "authorizer": {
+      "jwt": {
+        "claims": {
+          "sub": "11111111-1111-1111-1111-111111111111",
+          "email": "user@example.com"
+        },
+        "scopes": null
+      }
+    }
+  },
+  "pathParameters": {
+    "shortCode": "NrMVqW2"
+  },
+  "isBase64Encoded": false
+}
