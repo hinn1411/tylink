@@ -10,39 +10,58 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ShortCodeUtilsTest {
 
     @Test
-    void generateProducesValidShortCodes() {
+    void generate_calledRepeatedly_alwaysProducesValidShortCodes() {
         for (int i = 0; i < 100; i++) {
-            assertTrue(ShortCodeUtils.isValid(ShortCodeUtils.generate()));
+            String shortCode = ShortCodeUtils.generate();
+            boolean valid = ShortCodeUtils.isValid(shortCode);
+
+            assertTrue(valid);
         }
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"aB3xY9Z", "0000000", "zzzzzzz", "ABCDEFG", "1234567"})
-    void acceptsSevenCharacterBase62Codes(String shortCode) {
-        assertTrue(ShortCodeUtils.isValid(shortCode));
+    void isValid_sevenCharacterBase62Code_returnsTrue(String shortCode) {
+        boolean valid = ShortCodeUtils.isValid(shortCode);
+
+        assertTrue(valid);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"abc123", "a", ""})
-    void rejectsTooShortCodes(String shortCode) {
-        assertFalse(ShortCodeUtils.isValid(shortCode));
+    void isValid_tooShortCode_returnsFalse(String shortCode) {
+        boolean valid = ShortCodeUtils.isValid(shortCode);
+
+        assertFalse(valid);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"abc123456", "aB3xY9ZaB3xY9Z"})
-    void rejectsTooLongCodes(String shortCode) {
-        assertFalse(ShortCodeUtils.isValid(shortCode));
+    void isValid_tooLongCode_returnsFalse(String shortCode) {
+        boolean valid = ShortCodeUtils.isValid(shortCode);
+
+        assertFalse(valid);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"abc-123", "abc_123", "abc 123", "abc#123", "abc.123", "é234567"})
-    void rejectsCodesWithInvalidCharacters(String shortCode) {
-        assertFalse(ShortCodeUtils.isValid(shortCode));
+    void isValid_codeWithInvalidCharacters_returnsFalse(String shortCode) {
+        boolean valid = ShortCodeUtils.isValid(shortCode);
+
+        assertFalse(valid);
     }
 
     @Test
-    void rejectsBlankAndNullInput() {
-        assertFalse(ShortCodeUtils.isValid("   "));
-        assertFalse(ShortCodeUtils.isValid(null));
+    void isValid_blankInput_returnsFalse() {
+        boolean valid = ShortCodeUtils.isValid("   ");
+
+        assertFalse(valid);
+    }
+
+    @Test
+    void isValid_nullInput_returnsFalse() {
+        boolean valid = ShortCodeUtils.isValid(null);
+
+        assertFalse(valid);
     }
 }

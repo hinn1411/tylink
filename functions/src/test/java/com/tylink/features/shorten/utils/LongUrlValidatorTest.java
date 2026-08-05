@@ -16,13 +16,16 @@ class LongUrlValidatorTest {
             "HTTPS://example.com/mixed-case-scheme",
             "https://example.com/some/very/long/path?id=1"
     })
-    void acceptsWellFormedHttpAndHttpsUrls(String url) {
-        assertEquals(url.trim(), LongUrlValidator.validate(url));
+    void validate_wellFormedHttpOrHttpsUrl_returnsTrimmedUrl(String url) {
+        String result = LongUrlValidator.validate(url);
+
+        assertEquals(url.trim(), result);
     }
 
     @Test
-    void acceptsUrlWithLeadingAndTrailingWhitespaceAfterTrimming() {
+    void validate_urlWithLeadingAndTrailingWhitespace_returnsTrimmedUrl() {
         String result = LongUrlValidator.validate("  https://example.com/x  ");
+
         assertEquals("https://example.com/x", result);
     }
 
@@ -34,8 +37,10 @@ class LongUrlValidatorTest {
             "file:///etc/passwd",
             "vbscript:msgbox(1)"
     })
-    void rejectsNonHttpProtocols(String url) {
-        assertNull(LongUrlValidator.validate(url));
+    void validate_nonHttpProtocol_returnsNull(String url) {
+        String result = LongUrlValidator.validate(url);
+
+        assertNull(result);
     }
 
     @ParameterizedTest
@@ -44,31 +49,54 @@ class LongUrlValidatorTest {
             "http://example.com/\"onmouseover=\"alert(1)",
             "http://example.com/ path-with-space"
     })
-    void rejectsUrlsWithIllegalUriCharacters(String url) {
-        assertNull(LongUrlValidator.validate(url));
+    void validate_urlWithIllegalUriCharacters_returnsNull(String url) {
+        String result = LongUrlValidator.validate(url);
+
+        assertNull(result);
     }
 
     @Test
-    void rejectsUrlWithEmbeddedCrlf() {
-        assertNull(LongUrlValidator.validate("http://example.com/\r\nSet-Cookie: evil=1"));
+    void validate_urlWithEmbeddedCrlf_returnsNull() {
+        String result = LongUrlValidator.validate("http://example.com/\r\nSet-Cookie: evil=1");
+
+        assertNull(result);
     }
 
     @Test
-    void rejectsUrlWithNoHost() {
-        assertNull(LongUrlValidator.validate("http:///path"));
+    void validate_urlWithNoHost_returnsNull() {
+        String result = LongUrlValidator.validate("http:///path");
+
+        assertNull(result);
     }
 
     @Test
-    void rejectsOverlongUrl() {
+    void validate_overlongUrl_returnsNull() {
         String overlong = "https://example.com/" + "a".repeat(2048);
-        assertNull(LongUrlValidator.validate(overlong));
+
+        String result = LongUrlValidator.validate(overlong);
+
+        assertNull(result);
     }
 
     @Test
-    void rejectsBlankAndNullInput() {
-        assertNull(LongUrlValidator.validate(""));
-        assertNull(LongUrlValidator.validate("   "));
-        assertNull(LongUrlValidator.validate(null));
+    void validate_emptyInput_returnsNull() {
+        String result = LongUrlValidator.validate("");
+
+        assertNull(result);
+    }
+
+    @Test
+    void validate_blankInput_returnsNull() {
+        String result = LongUrlValidator.validate("   ");
+
+        assertNull(result);
+    }
+
+    @Test
+    void validate_nullInput_returnsNull() {
+        String result = LongUrlValidator.validate(null);
+
+        assertNull(result);
     }
 
     @ParameterizedTest
@@ -78,8 +106,10 @@ class LongUrlValidatorTest {
             "example.com/path",
             "//example.com/path"
     })
-    void rejectsUrlsWithNoScheme(String url) {
-        assertNull(LongUrlValidator.validate(url));
+    void validate_urlWithNoScheme_returnsNull(String url) {
+        String result = LongUrlValidator.validate(url);
+
+        assertNull(result);
     }
 
     @ParameterizedTest
@@ -87,8 +117,10 @@ class LongUrlValidatorTest {
             "https://example.com",
             "https://example.com/path"
     })
-    void acceptsUrlsWithoutSubdomain(String url) {
-        assertEquals(url, LongUrlValidator.validate(url));
+    void validate_urlWithoutSubdomain_returnsSameUrl(String url) {
+        String result = LongUrlValidator.validate(url);
+
+        assertEquals(url, result);
     }
 
     @ParameterizedTest
@@ -97,8 +129,10 @@ class LongUrlValidatorTest {
             "http://93.184.216.34/path",
             "http://127.0.0.1:8080/path"
     })
-    void acceptsIpv4Hosts(String url) {
-        assertEquals(url, LongUrlValidator.validate(url));
+    void validate_ipv4Host_returnsSameUrl(String url) {
+        String result = LongUrlValidator.validate(url);
+
+        assertEquals(url, result);
     }
 
     @ParameterizedTest
@@ -107,7 +141,9 @@ class LongUrlValidatorTest {
             "http://[2001:db8::1]/path",
             "http://[::1]:8080/path"
     })
-    void acceptsIpv6Hosts(String url) {
-        assertEquals(url, LongUrlValidator.validate(url));
+    void validate_ipv6Host_returnsSameUrl(String url) {
+        String result = LongUrlValidator.validate(url);
+
+        assertEquals(url, result);
     }
 }

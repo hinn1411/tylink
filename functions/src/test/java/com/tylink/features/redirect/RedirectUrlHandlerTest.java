@@ -61,7 +61,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void redirectsPublicUrlForAnonymousCaller() {
+    void handleRequest_anonymousCallerRequestsPublicUrl_redirects() {
         when(urlRepository.findByShortCode(SHORT_CODE))
                 .thenReturn(shortUrl(null, Visibility.PUBLIC, UrlStatus.ACTIVE));
 
@@ -72,7 +72,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void redirectsPublicUrlRegardlessOfCaller() {
+    void handleRequest_nonOwnerRequestsPublicUrl_redirects() {
         when(urlRepository.findByShortCode(SHORT_CODE))
                 .thenReturn(shortUrl(OWNER_ID, Visibility.PUBLIC, UrlStatus.ACTIVE));
 
@@ -83,7 +83,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void notFoundForAnonymousCallerOnPrivateUrl() {
+    void handleRequest_anonymousCallerRequestsPrivateUrl_returns404() {
         when(urlRepository.findByShortCode(SHORT_CODE))
                 .thenReturn(shortUrl(OWNER_ID, Visibility.PRIVATE, UrlStatus.ACTIVE));
 
@@ -93,7 +93,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void notFoundForWrongOwnerOnPrivateUrl() {
+    void handleRequest_nonOwnerRequestsPrivateUrl_returns404() {
         when(urlRepository.findByShortCode(SHORT_CODE))
                 .thenReturn(shortUrl(OWNER_ID, Visibility.PRIVATE, UrlStatus.ACTIVE));
 
@@ -103,7 +103,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void redirectsPrivateUrlForOwningCaller() {
+    void handleRequest_ownerRequestsPrivateUrl_redirects() {
         when(urlRepository.findByShortCode(SHORT_CODE))
                 .thenReturn(shortUrl(OWNER_ID, Visibility.PRIVATE, UrlStatus.ACTIVE));
 
@@ -114,7 +114,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void notFoundWhenItemDoesNotExist() {
+    void handleRequest_shortCodeNotFound_returns404() {
         when(urlRepository.findByShortCode(SHORT_CODE)).thenReturn(null);
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(anonymousEventFor(SHORT_CODE), null);
@@ -123,7 +123,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void notFoundForShortCodeTooShort() {
+    void handleRequest_shortCodeTooShort_returns404() {
         APIGatewayV2HTTPResponse response = handler.handleRequest(anonymousEventFor("abc123"), null);
 
         assertEquals(404, response.getStatusCode());
@@ -131,7 +131,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void notFoundForShortCodeTooLong() {
+    void handleRequest_shortCodeTooLong_returns404() {
         APIGatewayV2HTTPResponse response = handler.handleRequest(anonymousEventFor("abc123456"), null);
 
         assertEquals(404, response.getStatusCode());
@@ -139,7 +139,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void notFoundForShortCodeWithInvalidCharacters() {
+    void handleRequest_shortCodeWithInvalidCharacters_returns404() {
         APIGatewayV2HTTPResponse response = handler.handleRequest(anonymousEventFor("abc-123"), null);
 
         assertEquals(404, response.getStatusCode());
@@ -147,7 +147,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void notFoundWhenPathParametersMissing() {
+    void handleRequest_pathParametersMissing_returns404() {
         APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder().build();
 
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
@@ -157,7 +157,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void goneWhenPublicUrlIsDeleted() {
+    void handleRequest_publicUrlDeleted_returns410() {
         when(urlRepository.findByShortCode(SHORT_CODE))
                 .thenReturn(shortUrl(null, Visibility.PUBLIC, UrlStatus.DELETED));
 
@@ -167,7 +167,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void goneWhenOwnerRedirectsToDeletedPrivateUrl() {
+    void handleRequest_ownerRequestsDeletedPrivateUrl_returns410() {
         when(urlRepository.findByShortCode(SHORT_CODE))
                 .thenReturn(shortUrl(OWNER_ID, Visibility.PRIVATE, UrlStatus.DELETED));
 
@@ -177,7 +177,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void notFoundWhenNonOwnerRequestsDeletedPrivateUrl() {
+    void handleRequest_nonOwnerRequestsDeletedPrivateUrl_returns404() {
         when(urlRepository.findByShortCode(SHORT_CODE))
                 .thenReturn(shortUrl(OWNER_ID, Visibility.PRIVATE, UrlStatus.DELETED));
 
@@ -187,7 +187,7 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void internalErrorWhenRepositoryFails() {
+    void handleRequest_repositoryThrows_returns500() {
         when(urlRepository.findByShortCode(SHORT_CODE))
                 .thenThrow(new UrlRepositoryException("service unavailable", new RuntimeException("boom")));
 
@@ -197,17 +197,17 @@ class RedirectUrlHandlerTest {
     }
 
     @Test
-    void allNotFoundResponsesHaveIdenticalBody() {
+    void handleRequest_variousNotFoundCauses_returnsIdenticalBody() {
         when(urlRepository.findByShortCode(SHORT_CODE)).thenReturn(null);
-        String notFoundBody = handler.handleRequest(anonymousEventFor(SHORT_CODE), null).getBody();
+        APIGatewayV2HTTPResponse missingResponse = handler.handleRequest(anonymousEventFor(SHORT_CODE), null);
 
         when(urlRepository.findByShortCode(SHORT_CODE))
                 .thenReturn(shortUrl(OWNER_ID, Visibility.PRIVATE, UrlStatus.ACTIVE));
-        String privateMismatchBody = handler.handleRequest(anonymousEventFor(SHORT_CODE), null).getBody();
+        APIGatewayV2HTTPResponse privateMismatchResponse = handler.handleRequest(anonymousEventFor(SHORT_CODE), null);
 
-        String malformedBody = handler.handleRequest(anonymousEventFor("bad"), null).getBody();
+        APIGatewayV2HTTPResponse malformedResponse = handler.handleRequest(anonymousEventFor("bad"), null);
 
-        assertEquals(notFoundBody, privateMismatchBody);
-        assertEquals(notFoundBody, malformedBody);
+        assertEquals(missingResponse.getBody(), privateMismatchResponse.getBody());
+        assertEquals(missingResponse.getBody(), malformedResponse.getBody());
     }
 }
