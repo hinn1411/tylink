@@ -2,8 +2,8 @@ package com.tylink.features.shorten;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
-import com.tylink.model.ShortUrl;
-import com.tylink.model.Visibility;
+import com.tylink.models.ShortUrl;
+import com.tylink.models.Visibility;
 import com.tylink.repository.UrlRepository;
 import com.tylink.repository.UrlRepositoryException;
 import org.junit.jupiter.api.BeforeEach;
