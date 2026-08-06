@@ -3,6 +3,7 @@ package com.tylink.repository.dynamodb;
 import com.tylink.models.ShortUrl;
 import com.tylink.models.UrlStatus;
 import com.tylink.models.Visibility;
+import com.tylink.repository.UpdateOutcome;
 import com.tylink.repository.UrlRepositoryException;
 import com.tylink.repository.pagination.InvalidCursorException;
 import com.tylink.repository.pagination.UrlPage;
@@ -96,6 +97,14 @@ class DynamoDbUrlRepositoryTest {
     }
 
     @Test
+    void save_validShortUrl_omitsUpdatedAtAndDeletedAtWhenNeverUpdated() {
+        Map<String, AttributeValue> item = savedItem(ShortUrl.create("abc1234", "https://example.com/x", null, Visibility.PUBLIC));
+
+        assertFalse(item.containsKey(ShortUrlAttributes.UPDATED_AT));
+        assertFalse(item.containsKey(ShortUrlAttributes.DELETED_AT));
+    }
+
+    @Test
     void save_publicVisibility_reflectsPublicInItem() {
         Map<String, AttributeValue> item = savedItem(ShortUrl.create("abc1234", "https://example.com/x", null, Visibility.PUBLIC));
 
@@ -170,6 +179,7 @@ class DynamoDbUrlRepositoryTest {
         item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PRIVATE"));
         item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("ACTIVE"));
         item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        item.put(ShortUrlAttributes.UPDATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
         item.put(ShortUrlAttributes.OWNER_ID, AttributeValue.fromS("USER#u1"));
         when(dynamoDb.getItem(any(GetItemRequest.class)))
                 .thenReturn(GetItemResponse.builder().item(item).build());
@@ -182,10 +192,29 @@ class DynamoDbUrlRepositoryTest {
         assertEquals(Visibility.PRIVATE, shortUrl.visibility());
         assertEquals(UrlStatus.ACTIVE, shortUrl.status());
         assertEquals("2026-01-01T00:00:00Z", shortUrl.createdAt());
+        assertEquals("2026-01-01T00:00:00Z", shortUrl.updatedAt());
+        assertNull(shortUrl.deletedAt());
     }
 
     @Test
     void findByShortCode_ownerIdAttributeAbsent_returnsNullOwnerId() {
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put(ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"));
+        item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
+        item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PUBLIC"));
+        item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("ACTIVE"));
+        item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        item.put(ShortUrlAttributes.UPDATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        when(dynamoDb.getItem(any(GetItemRequest.class)))
+                .thenReturn(GetItemResponse.builder().item(item).build());
+
+        ShortUrl shortUrl = repository.findByShortCode("abc1234");
+
+        assertNull(shortUrl.ownerId());
+    }
+
+    @Test
+    void findByShortCode_updatedAtAttributeAbsent_returnsNullUpdatedAt() {
         Map<String, AttributeValue> item = new HashMap<>();
         item.put(ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"));
         item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
@@ -197,7 +226,7 @@ class DynamoDbUrlRepositoryTest {
 
         ShortUrl shortUrl = repository.findByShortCode("abc1234");
 
-        assertNull(shortUrl.ownerId());
+        assertNull(shortUrl.updatedAt());
     }
 
     @Test
@@ -208,12 +237,15 @@ class DynamoDbUrlRepositoryTest {
         item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PUBLIC"));
         item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("DELETED"));
         item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        item.put(ShortUrlAttributes.UPDATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        item.put(ShortUrlAttributes.DELETED_AT, AttributeValue.fromS("2026-01-02T00:00:00Z"));
         when(dynamoDb.getItem(any(GetItemRequest.class)))
                 .thenReturn(GetItemResponse.builder().item(item).build());
 
         ShortUrl shortUrl = repository.findByShortCode("abc1234");
 
         assertEquals(UrlStatus.DELETED, shortUrl.status());
+        assertEquals("2026-01-02T00:00:00Z", shortUrl.deletedAt());
     }
 
     @Test
@@ -257,11 +289,13 @@ class DynamoDbUrlRepositoryTest {
         assertEquals(TABLE_NAME, request.tableName());
         assertEquals("URL#abc1234", request.key().get(ShortUrlAttributes.PK).s());
         assertEquals("METADATA", request.key().get(ShortUrlAttributes.SK).s());
-        assertEquals("SET #status = :deleted", request.updateExpression());
+        assertEquals("SET #status = :deleted, #deletedAt = :deletedAt", request.updateExpression());
         assertEquals("attribute_exists(PK) AND #ownerId = :ownerId", request.conditionExpression());
         assertEquals(ShortUrlAttributes.STATUS, request.expressionAttributeNames().get("#status"));
+        assertEquals(ShortUrlAttributes.DELETED_AT, request.expressionAttributeNames().get("#deletedAt"));
         assertEquals(ShortUrlAttributes.OWNER_ID, request.expressionAttributeNames().get("#ownerId"));
         assertEquals("DELETED", request.expressionAttributeValues().get(":deleted").s());
+        assertFalse(request.expressionAttributeValues().get(":deletedAt").s().isBlank());
         assertEquals("USER#u1", request.expressionAttributeValues().get(":ownerId").s());
     }
 
@@ -282,6 +316,99 @@ class DynamoDbUrlRepositoryTest {
 
         UrlRepositoryException thrown =
                 assertThrows(UrlRepositoryException.class, () -> repository.markDeleted("abc1234", "u1"));
+
+        assertSame(cause, thrown.getCause());
+    }
+
+    @Test
+    void updateLongUrl_itemExistsOwnedAndActive_sendsConditionalUpdateAndReturnsUpdatedShortUrl() {
+        Map<String, AttributeValue> newAttributes = new HashMap<>();
+        newAttributes.put(ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"));
+        newAttributes.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/new"));
+        newAttributes.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PUBLIC"));
+        newAttributes.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("ACTIVE"));
+        newAttributes.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        newAttributes.put(ShortUrlAttributes.UPDATED_AT, AttributeValue.fromS("2026-01-02T00:00:00Z"));
+        newAttributes.put(ShortUrlAttributes.OWNER_ID, AttributeValue.fromS("USER#u1"));
+        when(dynamoDb.updateItem(any(UpdateItemRequest.class)))
+                .thenReturn(UpdateItemResponse.builder().attributes(newAttributes).build());
+
+        UpdateOutcome outcome = repository.updateLongUrl("abc1234", "u1", "https://example.com/new");
+
+        ArgumentCaptor<UpdateItemRequest> captor = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(dynamoDb).updateItem(captor.capture());
+        UpdateItemRequest request = captor.getValue();
+        assertEquals(TABLE_NAME, request.tableName());
+        assertEquals("URL#abc1234", request.key().get(ShortUrlAttributes.PK).s());
+        assertEquals("SET #longUrl = :longUrl, #updatedAt = :updatedAt", request.updateExpression());
+        assertEquals("attribute_exists(PK) AND #ownerId = :ownerId AND #status = :active", request.conditionExpression());
+        assertEquals("https://example.com/new", request.expressionAttributeValues().get(":longUrl").s());
+        assertEquals("USER#u1", request.expressionAttributeValues().get(":ownerId").s());
+        assertEquals("ACTIVE", request.expressionAttributeValues().get(":active").s());
+        assertEquals(UpdateOutcome.Status.UPDATED, outcome.status());
+        assertEquals("https://example.com/new", outcome.shortUrl().longUrl());
+        assertEquals("u1", outcome.shortUrl().ownerId());
+    }
+
+    @Test
+    void updateLongUrl_conditionalCheckFailsAndItemDoesNotExist_returnsNotFound() {
+        when(dynamoDb.updateItem(any(UpdateItemRequest.class)))
+                .thenThrow(ConditionalCheckFailedException.builder().message("condition failed").build());
+        when(dynamoDb.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+
+        UpdateOutcome outcome = repository.updateLongUrl("abc1234", "u1", "https://example.com/new");
+
+        assertEquals(UpdateOutcome.Status.NOT_FOUND, outcome.status());
+    }
+
+    @Test
+    void updateLongUrl_conditionalCheckFailsAndOwnerMismatches_returnsNotFoundHidingOwnership() {
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put(ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"));
+        item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
+        item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PUBLIC"));
+        item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("ACTIVE"));
+        item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        item.put(ShortUrlAttributes.UPDATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        item.put(ShortUrlAttributes.OWNER_ID, AttributeValue.fromS("USER#someone-else"));
+        when(dynamoDb.updateItem(any(UpdateItemRequest.class)))
+                .thenThrow(ConditionalCheckFailedException.builder().message("condition failed").build());
+        when(dynamoDb.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(item).build());
+
+        UpdateOutcome outcome = repository.updateLongUrl("abc1234", "u1", "https://example.com/new");
+
+        assertEquals(UpdateOutcome.Status.NOT_FOUND, outcome.status());
+    }
+
+    @Test
+    void updateLongUrl_conditionalCheckFailsAndItemAlreadyDeleted_returnsAlreadyDeletedWithCurrentState() {
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put(ShortUrlAttributes.PK, AttributeValue.fromS("URL#abc1234"));
+        item.put(ShortUrlAttributes.LONG_URL, AttributeValue.fromS("https://example.com/x"));
+        item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PUBLIC"));
+        item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("DELETED"));
+        item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        item.put(ShortUrlAttributes.UPDATED_AT, AttributeValue.fromS("2026-01-01T00:00:00Z"));
+        item.put(ShortUrlAttributes.DELETED_AT, AttributeValue.fromS("2026-01-03T00:00:00Z"));
+        item.put(ShortUrlAttributes.OWNER_ID, AttributeValue.fromS("USER#u1"));
+        when(dynamoDb.updateItem(any(UpdateItemRequest.class)))
+                .thenThrow(ConditionalCheckFailedException.builder().message("condition failed").build());
+        when(dynamoDb.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(item).build());
+
+        UpdateOutcome outcome = repository.updateLongUrl("abc1234", "u1", "https://example.com/new");
+
+        assertEquals(UpdateOutcome.Status.ALREADY_DELETED, outcome.status());
+        assertEquals("https://example.com/x", outcome.shortUrl().longUrl());
+        assertEquals("2026-01-03T00:00:00Z", outcome.shortUrl().deletedAt());
+    }
+
+    @Test
+    void updateLongUrl_dynamoDbThrowsOtherSdkException_wrapsAsUrlRepositoryException() {
+        RuntimeException cause = DynamoDbException.builder().message("service unavailable").build();
+        when(dynamoDb.updateItem(any(UpdateItemRequest.class))).thenThrow(cause);
+
+        UrlRepositoryException thrown = assertThrows(UrlRepositoryException.class,
+                () -> repository.updateLongUrl("abc1234", "u1", "https://example.com/new"));
 
         assertSame(cause, thrown.getCause());
     }
@@ -371,6 +498,7 @@ class DynamoDbUrlRepositoryTest {
         item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS("PRIVATE"));
         item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS("ACTIVE"));
         item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS("2026-01-01T00:00:00.000000000Z"));
+        item.put(ShortUrlAttributes.UPDATED_AT, AttributeValue.fromS("2026-01-01T00:00:00.000000000Z"));
         item.put(ShortUrlAttributes.OWNER_ID, AttributeValue.fromS("USER#u1"));
         when(dynamoDb.query(any(QueryRequest.class))).thenReturn(QueryResponse.builder().items(List.of(item)).build());
 

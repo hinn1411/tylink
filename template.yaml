@@ -201,6 +201,29 @@ Resources:
             Auth:
               Authorizer: NativeJwtAuthorizer
 
+  UpdateUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: com.tylink.features.update.UpdateUrlHandler::handleRequest
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref UrlTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UrlTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref UrlTable
+      Events:
+        UpdateUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/urls/{shortCode}
+            Method: patch
+            Auth:
+              Authorizer: NativeJwtAuthorizer
+
 Outputs:
   HttpApiUrl:
     Description: "Base URL for the tylink HTTP API"
@@ -241,6 +264,15 @@ Outputs:
   DeleteUrlFunctionIamRole:
     Description: "Implicit IAM Role created for the Delete URL function"
     Value: !GetAtt DeleteUrlFunctionRole.Arn
+  UpdateUrlApi:
+    Description: "API Gateway endpoint URL for the update-URL route"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/urls/{shortCode}"
+  UpdateUrlFunction:
+    Description: "Update URL Lambda Function ARN"
+    Value: !GetAtt UpdateUrlFunction.Arn
+  UpdateUrlFunctionIamRole:
+    Description: "Implicit IAM Role created for the Update URL function"
+    Value: !GetAtt UpdateUrlFunctionRole.Arn
   ExtractTokenAuthorizerFunction:
     Description: "Extract-Token Authorizer Lambda Function ARN"
     Value: !GetAtt ExtractTokenAuthorizerFunction.Arn

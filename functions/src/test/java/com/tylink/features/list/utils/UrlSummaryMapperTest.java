@@ -15,7 +15,7 @@ class UrlSummaryMapperTest {
 
     private static ShortUrl shortUrl(String shortCode) {
         return new ShortUrl(shortCode, "https://example.com/" + shortCode, "u1", Visibility.PRIVATE,
-                UrlStatus.ACTIVE, "2026-01-01T00:00:00.000000000Z");
+                UrlStatus.ACTIVE, "2026-01-01T00:00:00.000000000Z", "2026-01-01T00:00:00.000000000Z", null);
     }
 
     @Test
