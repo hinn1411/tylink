@@ -57,7 +57,8 @@ class RedirectUrlHandlerTest {
     }
 
     private ShortUrl shortUrl(String ownerId, Visibility visibility, UrlStatus status) {
-        return new ShortUrl(SHORT_CODE, LONG_URL, ownerId, visibility, status, "2026-01-01T00:00:00Z");
+        return new ShortUrl(SHORT_CODE, LONG_URL, ownerId, visibility, status, "2026-01-01T00:00:00Z",
+                "2026-01-01T00:00:00Z", null);
     }
 
     @Test

@@ -1,4 +1,4 @@
-package com.tylink.features.shorten.utils;
+package com.tylink.utils;
 
 import software.amazon.awssdk.utils.StringUtils;
 

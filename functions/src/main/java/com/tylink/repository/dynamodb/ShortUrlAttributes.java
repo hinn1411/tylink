@@ -8,6 +8,8 @@ public final class ShortUrlAttributes {
     public static final String VISIBILITY = "visibility";
     public static final String STATUS = "status";
     public static final String CREATED_AT = "createdAt";
+    public static final String UPDATED_AT = "updatedAt";
+    public static final String DELETED_AT = "deletedAt";
     public static final String OWNER_ID = "ownerId";
     public static final String GSI1_PK = "GSI1_PK";
     public static final String GSI1_SK = "GSI1_SK";

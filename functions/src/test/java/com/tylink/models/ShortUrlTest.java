@@ -7,6 +7,7 @@ import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ShortUrlTest {
@@ -25,6 +26,14 @@ class ShortUrlTest {
         assertEquals(Visibility.PRIVATE, shortUrl.visibility());
         assertEquals(UrlStatus.ACTIVE, shortUrl.status());
         assertFalse(shortUrl.createdAt().isBlank());
+    }
+
+    @Test
+    void create_validInputs_setsUpdatedAtAndDeletedAtNull() {
+        ShortUrl shortUrl = newShortUrl();
+
+        assertNull(shortUrl.updatedAt());
+        assertNull(shortUrl.deletedAt());
     }
 
     @Test

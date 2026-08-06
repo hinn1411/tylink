@@ -3,9 +3,11 @@ package com.tylink.repository.dynamodb;
 import com.tylink.models.ShortUrl;
 import com.tylink.models.UrlStatus;
 import com.tylink.models.Visibility;
+import com.tylink.repository.UpdateOutcome;
 import com.tylink.repository.UrlRepository;
 import com.tylink.repository.UrlRepositoryException;
 import com.tylink.repository.pagination.UrlPage;
+import com.tylink.utils.TimestampUtils;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -15,11 +17,14 @@ import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
+import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 public class DynamoDbUrlRepository implements UrlRepository {
@@ -109,13 +114,15 @@ public class DynamoDbUrlRepository implements UrlRepository {
                     .key(Map.of(
                             ShortUrlAttributes.PK, AttributeValue.fromS(ShortUrlAttributes.URL_KEY_PREFIX + shortCode),
                             ShortUrlAttributes.SK, AttributeValue.fromS(ShortUrlAttributes.SK_METADATA)))
-                    .updateExpression("SET #status = :deleted")
+                    .updateExpression("SET #status = :deleted, #deletedAt = :deletedAt")
                     .conditionExpression("attribute_exists(PK) AND #ownerId = :ownerId")
                     .expressionAttributeNames(Map.of(
                             "#status", ShortUrlAttributes.STATUS,
+                            "#deletedAt", ShortUrlAttributes.DELETED_AT,
                             "#ownerId", ShortUrlAttributes.OWNER_ID))
                     .expressionAttributeValues(Map.of(
                             ":deleted", AttributeValue.fromS(UrlStatus.DELETED.name()),
+                            ":deletedAt", AttributeValue.fromS(TimestampUtils.now()),
                             ":ownerId", AttributeValue.fromS(ShortUrlAttributes.USER_KEY_PREFIX + ownerId)))
                     .build());
             return true;
@@ -127,30 +134,74 @@ public class DynamoDbUrlRepository implements UrlRepository {
         }
     }
 
+    @Override
+    public UpdateOutcome updateLongUrl(String shortCode, String ownerId, String longUrl) {
+        try {
+            UpdateItemResponse response = dynamoDb.updateItem(UpdateItemRequest.builder()
+                    .tableName(tableName)
+                    .key(Map.of(
+                            ShortUrlAttributes.PK, AttributeValue.fromS(ShortUrlAttributes.URL_KEY_PREFIX + shortCode),
+                            ShortUrlAttributes.SK, AttributeValue.fromS(ShortUrlAttributes.SK_METADATA)))
+                    .updateExpression("SET #longUrl = :longUrl, #updatedAt = :updatedAt")
+                    .conditionExpression("attribute_exists(PK) AND #ownerId = :ownerId AND #status = :active")
+                    .expressionAttributeNames(Map.of(
+                            "#longUrl", ShortUrlAttributes.LONG_URL,
+                            "#updatedAt", ShortUrlAttributes.UPDATED_AT,
+                            "#ownerId", ShortUrlAttributes.OWNER_ID,
+                            "#status", ShortUrlAttributes.STATUS))
+                    .expressionAttributeValues(Map.of(
+                            ":longUrl", AttributeValue.fromS(longUrl),
+                            ":updatedAt", AttributeValue.fromS(TimestampUtils.now()),
+                            ":ownerId", AttributeValue.fromS(ShortUrlAttributes.USER_KEY_PREFIX + ownerId),
+                            ":active", AttributeValue.fromS(UrlStatus.ACTIVE.name())))
+                    .returnValues(ReturnValue.ALL_NEW)
+                    .build());
+            return UpdateOutcome.updated(toShortUrl(response.attributes()));
+        } catch (ConditionalCheckFailedException e) {
+            return resolveUpdateFailure(shortCode, ownerId);
+        } catch (SdkException e) {
+            throw new UrlRepositoryException(
+                    "Failed to update shortCode=" + shortCode + " in table " + tableName, e);
+        }
+    }
+
+    // ConditionalCheckFailedException doesn't say why: not found, wrong owner, and DELETED all
+    // look the same, so re-read to tell "yours but deleted" (410) apart from "not yours" (404).
+    private UpdateOutcome resolveUpdateFailure(String shortCode, String ownerId) {
+        ShortUrl existing = findByShortCode(shortCode);
+        if (Objects.isNull(existing) || !Objects.equals(existing.ownerId(), ownerId)) {
+            return UpdateOutcome.notFound();
+        }
+        return UpdateOutcome.alreadyDeleted(existing);
+    }
+
     private static ShortUrl toShortUrl(Map<String, AttributeValue> item) {
         String shortCode = requiredAttribute(item, ShortUrlAttributes.PK)
                 .substring(ShortUrlAttributes.URL_KEY_PREFIX.length());
-        String ownerId = Optional.ofNullable(item.get(ShortUrlAttributes.OWNER_ID))
-                .map(AttributeValue::s)
+        String longUrl = requiredAttribute(item, ShortUrlAttributes.LONG_URL);
+        Visibility visibility = Visibility.parse(requiredAttribute(item, ShortUrlAttributes.VISIBILITY));
+        UrlStatus status = UrlStatus.parse(requiredAttribute(item, ShortUrlAttributes.STATUS));
+        String createdAt = requiredAttribute(item, ShortUrlAttributes.CREATED_AT);
+        String ownerId = optionalAttribute(item, ShortUrlAttributes.OWNER_ID)
                 .map(prefixed -> prefixed.substring(ShortUrlAttributes.USER_KEY_PREFIX.length()))
                 .orElse(null);
-        return new ShortUrl(
-                shortCode,
-                requiredAttribute(item, ShortUrlAttributes.LONG_URL),
-                ownerId,
-                Visibility.parse(requiredAttribute(item, ShortUrlAttributes.VISIBILITY)),
-                UrlStatus.parse(requiredAttribute(item, ShortUrlAttributes.STATUS)),
-                requiredAttribute(item, ShortUrlAttributes.CREATED_AT));
+        String updatedAt = optionalAttribute(item, ShortUrlAttributes.UPDATED_AT).orElse(null);
+        String deletedAt = optionalAttribute(item, ShortUrlAttributes.DELETED_AT).orElse(null);
+
+        return new ShortUrl(shortCode, longUrl, ownerId, visibility, status, createdAt, updatedAt, deletedAt);
     }
 
-    // Returned attribute from DynamoDB does not match ShortUrl schema (e.g. a partially
-    // written item from a bug, a manual console edit, or a bad migration).
-    // Throw exception with attribute name to investigate instead of NullPointerException
+
+    // Attributes required by schema, exception means application error
     private static String requiredAttribute(Map<String, AttributeValue> item, String attributeName) {
-        return Optional.ofNullable(item.get(attributeName))
-                .map(AttributeValue::s)
+        return optionalAttribute(item, attributeName)
                 .orElseThrow(() -> new UrlRepositoryException(
                         "Corrupted item: missing required attribute " + attributeName));
+    }
+
+    // Optionally attributes exist in schema
+    private static Optional<String> optionalAttribute(Map<String, AttributeValue> item, String attributeName) {
+        return Optional.ofNullable(item.get(attributeName)).map(AttributeValue::s);
     }
 
     private static Map<String, AttributeValue> toItem(ShortUrl shortUrl) {
@@ -161,6 +212,12 @@ public class DynamoDbUrlRepository implements UrlRepository {
         item.put(ShortUrlAttributes.VISIBILITY, AttributeValue.fromS(shortUrl.visibility().name()));
         item.put(ShortUrlAttributes.STATUS, AttributeValue.fromS(shortUrl.status().name()));
         item.put(ShortUrlAttributes.CREATED_AT, AttributeValue.fromS(shortUrl.createdAt()));
+        if (shortUrl.updatedAt() != null) {
+            item.put(ShortUrlAttributes.UPDATED_AT, AttributeValue.fromS(shortUrl.updatedAt()));
+        }
+        if (shortUrl.deletedAt() != null) {
+            item.put(ShortUrlAttributes.DELETED_AT, AttributeValue.fromS(shortUrl.deletedAt()));
+        }
 
         // Do not partition url for unauthenticated users
         if (shortUrl.ownerId() != null) {

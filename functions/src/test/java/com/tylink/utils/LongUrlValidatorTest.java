@@ -1,4 +1,4 @@
-package com.tylink.features.shorten.utils;
+package com.tylink.utils;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
