@@ -165,10 +165,8 @@ public class DynamoDbUrlRepository implements UrlRepository {
         }
     }
 
-    // The condition on updateLongUrl's UpdateItem can't distinguish why it failed (not found,
-    // wrong owner, or DELETED all raise the same ConditionalCheckFailedException), so re-read
-    // the item to tell an owner attempting to edit a deleted URL (410) apart from a caller who
-    // has no business seeing this shortCode exists at all (404, ownership hidden).
+    // ConditionalCheckFailedException doesn't say why: not found, wrong owner, and DELETED all
+    // look the same, so re-read to tell "yours but deleted" (410) apart from "not yours" (404).
     private UpdateOutcome resolveUpdateFailure(String shortCode, String ownerId) {
         ShortUrl existing = findByShortCode(shortCode);
         if (Objects.isNull(existing) || !Objects.equals(existing.ownerId(), ownerId)) {

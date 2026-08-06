@@ -72,6 +72,10 @@ public class UpdateUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
             return RequestUtils.jsonResponse(500, Map.of("message", "failed to update short url"));
         }
 
+        return toResponse(shortCode, outcome);
+    }
+
+    private static APIGatewayV2HTTPResponse toResponse(String shortCode, UpdateOutcome outcome) {
         return switch (outcome.status()) {
             case NOT_FOUND -> {
                 log.info("shortCode={} not found or not owned by caller", shortCode);
