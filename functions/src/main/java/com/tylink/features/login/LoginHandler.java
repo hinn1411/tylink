@@ -73,7 +73,7 @@ public class LoginHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGa
         try {
             authResponse = cognitoClient.initiateAuth(authRequest);
         } catch (NotAuthorizedException | UserNotFoundException e) {
-            log.warn("Rejected login attempt: invalid credentials");
+            log.warn("Login attempt rejected. Cause by: {}", e.getClass().getSimpleName());
             return RequestUtils.jsonResponse(401, INVALID_CREDENTIALS_BODY);
         } catch (CognitoIdentityProviderException e) {
             log.error("Cognito InitiateAuth failed", e);
