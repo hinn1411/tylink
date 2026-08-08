@@ -1,0 +1,30 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /v1/auth/login",
+  "rawPath": "/v1/auth/login",
+  "rawQueryString": "",
+  "headers": {
+    "content-type": "application/json",
+    "user-agent": "Custom User Agent String"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "1234567890",
+    "domainName": "1234567890.execute-api.us-east-1.amazonaws.com",
+    "domainPrefix": "1234567890",
+    "http": {
+      "method": "POST",
+      "path": "/v1/auth/login",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "Custom User Agent String"
+    },
+    "requestId": "00000000-0000-0000-0000-000000000000",
+    "routeKey": "POST /v1/auth/login",
+    "stage": "$default",
+    "time": "09/Apr/2015:12:34:56 +0000",
+    "timeEpoch": 1428582896000
+  },
+  "body": "{\"username\": \"test@example.com\", \"password\": \"YourTestPass123!\"}",
+  "isBase64Encoded": false
+}

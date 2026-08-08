@@ -57,6 +57,28 @@ Resources:
           USER_POOL_ID: !Ref UserPool
           USER_POOL_CLIENT_ID: !Ref UserPoolClient
 
+  LoginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: com.tylink.features.login.LoginHandler::handleRequest
+      Environment:
+        Variables:
+          USER_POOL_CLIENT_ID: !Ref UserPoolClient
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: cognito-idp:InitiateAuth
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        # Public route, no Authorizer
+        Login:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/auth/login
+            Method: post
+
   # Explicit HTTP API (rather than the implicit one SAM would otherwise create from the
   # functions' Events blocks) so routes can opt into the custom authorizer below. Every
   # HttpApi event must reference ApiId: !Ref HttpApi, or SAM implicitly creates a second,
@@ -276,6 +298,15 @@ Outputs:
   ExtractTokenAuthorizerFunction:
     Description: "Extract-Token Authorizer Lambda Function ARN"
     Value: !GetAtt ExtractTokenAuthorizerFunction.Arn
+  LoginApi:
+    Description: "API Gateway endpoint URL for the login route"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/v1/auth/login"
+  LoginFunction:
+    Description: "Login Lambda Function ARN"
+    Value: !GetAtt LoginFunction.Arn
+  LoginFunctionIamRole:
+    Description: "Implicit IAM Role created for the Login function"
+    Value: !GetAtt LoginFunctionRole.Arn
   UserPoolId:
     Description: "Cognito User Pool ID"
     Value: !Ref UserPool
