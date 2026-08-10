@@ -2,9 +2,12 @@
 
 Goal: a fully working URL shortener satisfying every functional requirement, deployed on AWS, within free tier. See `00-overview.md` for the full requirement list and tech stack.
 
-## Core Data Model & Algorithm (foundation for everything else)
+## Short-Code Generation Algorithm (foundation for everything else)
 
 - **Short-code generation**: random 7-char Base62 string (`SecureRandom`, ~3.5×10^13 combinations) used **as the DynamoDB partition key itself**, written with `PutItem` + condition `attribute_not_exists(PK)`, retrying (rare) on `ConditionalCheckFailedException`. This avoids the classic auto-increment-counter mistake, which creates a single hot write partition (capped ~1,000 WCU/partition) and produces guessable/enumerable codes. (Full reasoning in `02-phase2-scaling.md`.)
+
+## Core Data Model
+
 - **DynamoDB single-table design** (two access patterns: redirect-by-code, and list-by-user):
   - Base table: `PK = URL#<shortCode>`, `SK = METADATA` — fast point lookup, the hot redirect path.
   - GSI1: `GSI1PK = USER#<userId>`, `GSI1SK = URL#<createdAt>#<shortCode>` — supports paginated, sorted "list all URLs of a user" (F3).
@@ -23,7 +26,7 @@ Goal: a fully working URL shortener satisfying every functional requirement, dep
 3. **Auth**: Cognito User Pool + username/password; Google as a federated IdP (OAuth client in Google Cloud Console, IdP + Hosted UI + callback URLs in Cognito). Routes that *always* require a caller can use API Gateway's **native JWT/Cognito authorizer** (zero custom code). `create` can't — it must stay reachable by anonymous callers (F8 allows anonymous `PUBLIC` creates), and a native JWT authorizer is all-or-nothing per route with no "optional" mode. It instead sits behind a custom **Lambda authorizer** (`ExtractTokenAuthorizerHandler`) that never denies a request: it verifies the token when one's present (against the User Pool's JWKS) and passes the caller's id through in the authorizer context, or an empty context when there's none. `redirect/decode` has the identical "must stay open to anonymous callers" problem for public links (see below) and is a natural candidate for the same authorizer later, though it isn't wired up yet. See `docs/technical_decisions/04-dynamodb-access-patterns.md`.
 4. **API Gateway type: HTTP API**, not REST API — native JWT authorizer support, and ~3.5x cheaper per request; reserve REST API only if you later need per-stage native caching or API keys (we get caching from CloudFront instead). Mount all routes under a `/v1` prefix (F7) from day one — cheap now, expensive to retrofit once clients exist.
 5. Build 5 Lambdas, each behind its own route:
-   - `create` — validates the long URL (optionally checks it against a domain blocklist, F6), generates the short code, writes with `attribute_not_exists(PK)` (collision-avoidance — see Core Data Model above; this is a *different* mechanism from client-retry idempotency). Gate entry with the **Powertools Idempotency utility** keyed on the client's `Idempotency-Key` header (F4) — this must run *before* a new code is generated, or a retried request will just mint a second, different short code for the same logical request.
+   - `create` — validates the long URL (optionally checks it against a domain blocklist, F6), generates the short code, writes with `attribute_not_exists(PK)` (collision-avoidance — see Short-Code Generation Algorithm above; this is a *different* mechanism from client-retry idempotency). Gate entry with the **Powertools Idempotency utility** keyed on the client's `Idempotency-Key` header (F4) — this must run *before* a new code is generated, or a retried request will just mint a second, different short code for the same logical request.
    - `redirect/decode` — `GetItem`, checks `expiresAt`, `status`, and `visibility` (404 if absent, 410 if soft-deleted, 404 if private and caller doesn't match `ownerId`, otherwise 302/307 redirect). See "Private URL visibility" above.
    - `list` — paginated `Query` on GSI1, with a `FilterExpression` excluding `status = DELETED` items (soft-deleted items still exist in the table, see Core Data Model above — they must not resurface in a user's list)
    - `update` — `UpdateItem` on the existing `(PK, SK)` item, touching only `longUrl` (and `expiresAt` if editable). Keeps the short code and `createdAt` stable — no delete-and-recreate: that would mint a new code (breaking already-shared links), isn't atomic, and would shift the item's position in GSI1's sort order mid-pagination.
@@ -32,17 +35,9 @@ Goal: a fully working URL shortener satisfying every functional requirement, dep
    A 6th Lambda (async TTL/Streams cleanup) is added in Phase 2, not here — see `02-phase2-scaling.md`, "Async cleanup resilience."
 6. CloudFront in front of the HTTP API using its default domain (no Route 53 yet).
 7. Local dev/test: `sam local start-api` + DynamoDB Local via docker-compose; JUnit5 + Mockito unit tests against the `UrlRepository` interface (N4 — see `03-phase3-load-testing.md` for the full testing strategy).
-8. First deploy: `sam deploy --guided` to a personal dev stack; AWS Budgets alert (N5); a baseline CloudWatch dashboard (5xx rate, DynamoDB throttles).
-9. CI/CD v1: GitHub Actions + OIDC, build + unit test + `sam deploy` to dev on push to main (see `04-cicd-and-iac.md`).
-
-## Project Structure to Scaffold
-
-- `template.yaml` — SAM template: Cognito User Pool + Google IdP, DynamoDB table + GSI1, HTTP API + JWT authorizer, the 5 Phase 1 Lambdas with per-function IAM roles, KMS CMK, CloudFront distribution
-- `pom.xml` — Maven build, Powertools dependency, shading plugin for the Lambda artifact
-- `src/main/java/.../repository/UrlRepository.java` — the interface boundary between handlers and DynamoDB (N4) — get this right first, it's what makes unit testing possible
-- `src/main/java/.../model/UrlItem.java` — single-table item model (PK/SK/GSI1PK/GSI1SK mapping)
-- `.github/workflows/deploy.yaml` — CI/CD pipeline (OIDC auth, build/test/deploy)
+8. CI/CD v1: GitHub Actions + OIDC, build + unit test + `sam deploy` to dev on push to main (see `04-cicd-and-iac.md`).
 
 ## Verification
-
-Phase 1 is done when: all 6 operations work end-to-end against a deployed dev stack (`sam deploy --guided`), reachable via the CloudFront URL, with Cognito username/password **and** Google login both functional, unit tests passing, and the GitHub Actions pipeline green on a push to main.
+- All APIs access via CloudFront URL
+- Unit tests & Integration tests pass
+- CI/CD trigger (Optional)

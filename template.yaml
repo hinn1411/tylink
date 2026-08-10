@@ -193,6 +193,24 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  # Separate from UrlTable deliberately — keeps UrlTable's single-item-type shape intact, and
+  # Powertools' DynamoDBPersistenceStore assumes a HASH-only key schema (UrlTable's SK range key
+  # would need extra withSortKeyAttr/withStaticPkValue config for no real benefit). See
+  # docs/technical_decisions/09-idempotency-payload-validation.md.
+  IdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiration
+        Enabled: true
+
   ShortenUrlFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -201,9 +219,12 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref UrlTable
+          IDEMPOTENCY_TABLE_NAME: !Ref IdempotencyTable
       Policies:
         - DynamoDBWritePolicy:
             TableName: !Ref UrlTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
       Events:
         ShortenUrl:
           Type: HttpApi

@@ -56,6 +56,11 @@
           <version>${powertools.version}</version>
         </dependency>
         <dependency>
+          <groupId>software.amazon.lambda</groupId>
+          <artifactId>powertools-idempotency-dynamodb</artifactId>
+          <version>${powertools.version}</version>
+        </dependency>
+        <dependency>
           <groupId>org.aspectj</groupId>
           <artifactId>aspectjrt</artifactId>
           <version>${aspectj.version}</version>
@@ -138,6 +143,10 @@
                 <groupId>software.amazon.lambda</groupId>
                 <artifactId>powertools-logging</artifactId>
               </aspectLibrary>
+              <aspectLibrary>
+                <groupId>software.amazon.lambda</groupId>
+                <artifactId>powertools-idempotency-core</artifactId>
+              </aspectLibrary>
             </aspectLibraries>
           </configuration>
           <dependencies>
@@ -160,6 +169,13 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
           <version>3.2.5</version>
+          <configuration>
+            <!-- Makes @Idempotent a no-op passthrough for unit tests, so ShortenUrlHandlerTest
+                 doesn't need DynamoDB/Docker (N4) to exercise the write path it wraps. -->
+            <environmentVariables>
+              <POWERTOOLS_IDEMPOTENCY_DISABLED>true</POWERTOOLS_IDEMPOTENCY_DISABLED>
+            </environmentVariables>
+          </configuration>
         </plugin>
       </plugins>
     </build>

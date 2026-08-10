@@ -25,18 +25,18 @@ The project is split into 3 phases, documented one file per phase in this `plans
 ## Original Functional Requirements (as given)
 
 **Authentication & Authorization**:
-- Log in by username and password
-- Log in by Google
+- [x] Log in by username and password
+- [x] Log in by Google
 
 **Core features**:
-- Encode a long URL into a shortened version
-- Decode/restore shortened URL to original URL
-- Add an expiration time for the encoded URL (Optional)
+- [x] Encode a long URL into a shortened version
+- [x] Decode/restore shortened URL to original URL
+- [ ] Add an expiration time for the encoded URL (Optional)
 
 **Management features**:
-- Get all created URLs of a user
-- Delete a URL
-- Update a URL
+- [x] Get all created URLs of a user
+- [x] Delete a URL
+- [x] Update a URL
 
 ## Additional Functional Requirements
 
@@ -90,7 +90,3 @@ The project is split into 3 phases, documented one file per phase in this `plans
 | AWS WAF | ~$5/mo per Web ACL + per-rule + per-request cost, no free tier | Optional Phase 2 hardening exercise once the core system works; not required to learn the throttling/rate-limiting *concepts*, which HTTP API's built-in per-route/stage rate & burst limits cover for free (usage plans/API keys are a REST-API-only feature, not available on the HTTP API this project uses) |
 | Route 53 hosted zone + custom domain | $0.50/mo hosted zone + domain purchase | Whenever you're ready to brand it — plugs into the existing CloudFront distribution with no re-architecture |
 | AWS Distributed Load Testing on AWS (Fargate-based) | Cost per test run (bounded, but not free) | One-time Phase 3 capstone run only, torn down immediately after; k6 run locally is the default/repeated dev-loop tool |
-
-## Important Clarification: User Pool, not Identity Pool
-
-You need a **Cognito User Pool** with Google configured as a federated IdP on it — **not** a Cognito **Identity Pool**. Identity Pools hand out temporary AWS credentials for clients calling AWS services *directly*; here the client only ever presents a JWT to API Gateway, so a User Pool alone is correct. Many tutorials conflate the two — be deliberate about only building the User Pool.

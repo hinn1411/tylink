@@ -66,6 +66,7 @@ sam local start-api --port 3000
 # In another shell, call the locally emulated route:
 curl -i -X POST http://localhost:3000/v1/urls \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $(uuidgen)" \
   -d '{}'
 ```
 
