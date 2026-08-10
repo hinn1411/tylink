@@ -19,6 +19,16 @@ Globals:
         POWERTOOLS_LOG_LEVEL: INFO
         POWERTOOLS_SERVICE_NAME: tylink
 
+Parameters:
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Description: >
+      Google OAuth client secret. CloudFormation can't resolve an ssm-secure dynamic reference for
+      AWS::Cognito::UserPoolIdentityProvider, so a script supplying this at deploy time (see
+      scripts/deploy.sh) is required. Never hardcode a value here or in samconfig.toml (both are
+      committed to git).
+
 Resources:
   UserPool:
     Type: AWS::Cognito::UserPool
@@ -38,6 +48,10 @@ Resources:
 
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
+    # SupportedIdentityProviders: [Google] below references GoogleIdentityProvider by name, but
+    # CloudFormation can't infer that from ProviderName (a plain string), so without this
+    # DependsOn it may try to create the client before the identity provider exists.
+    DependsOn: GoogleIdentityProvider
     Properties:
       UserPoolId: !Ref UserPool
       ClientName: !Sub "${AWS::StackName}-client"
@@ -46,6 +60,46 @@ Resources:
         - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+        - Google
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+      # Where Cognito sends the browser after step 8/9 of the broker flow (§8 in
+      # docs/learning/09-oauth2-and-oidc.md). Placeholder until the frontend exists — swap for
+      # the real app URL(s) once one does.
+      CallbackURLs:
+        - https://example.com/callback
+      LogoutURLs:
+        - https://example.com/logout
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      # Domain prefixes must be unique across ALL AWS accounts in the region, not just this
+      # account — AccountId suffix guarantees that (StackName alone could collide).
+      Domain: !Sub "${AWS::StackName}-${AWS::AccountId}"
+
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        # client_id isn't sensitive, so a plain (non-secure) ssm dynamic reference works. secret
+        # can't — see GoogleClientSecret's Description above.
+        client_id: "{{resolve:ssm:/tylink/google-oauth-client-id:1}}"
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: "openid email profile"
+      AttributeMapping:
+        email: email
 
   ExtractTokenAuthorizerFunction:
     Type: AWS::Serverless::Function
@@ -310,6 +364,12 @@ Outputs:
   UserPoolId:
     Description: "Cognito User Pool ID"
     Value: !Ref UserPool
+  CognitoHostedUiDomain:
+    Description: "Cognito Hosted UI base URL"
+    Value: !Sub "https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
+  CognitoIdpResponseRedirectUri:
+    Description: "Redirect URI to register as the Google OAuth client's Authorized redirect URI"
+    Value: !Sub "https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com/oauth2/idpresponse"
   UserPoolClientId:
     Description: "Cognito User Pool App Client ID"
     Value: !Ref UserPoolClient
