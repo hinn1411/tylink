@@ -1,5 +1,6 @@
 package com.tylink.utils;
 
+import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +21,18 @@ public final class RequestUtils {
 
     public static APIGatewayV2HTTPResponse notFound() {
         return jsonResponse(404, NOT_FOUND_BODY);
+    }
+
+    public static String getHeader(APIGatewayV2HTTPEvent input, String name) {
+        Map<String, String> headers = input.getHeaders();
+        if (headers == null) {
+            return null;
+        }
+        return headers.entrySet().stream()
+                .filter(entry -> entry.getKey().equalsIgnoreCase(name))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse(null);
     }
 
     public static <T> T parseBody(String body, Class<T> type) {

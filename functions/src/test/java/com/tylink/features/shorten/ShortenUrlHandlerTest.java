@@ -22,6 +22,8 @@ import static org.mockito.Mockito.verify;
 
 class ShortenUrlHandlerTest {
 
+    private static final String DEFAULT_IDEMPOTENCY_KEY = "test-idempotency-key";
+
     private UrlRepository urlRepository;
     private ShortenUrlHandler handler;
 
@@ -46,6 +48,7 @@ class ShortenUrlHandlerTest {
                         .build();
         return APIGatewayV2HTTPEvent.builder()
                 .withBody(body)
+                .withHeaders(Map.of("idempotency-key", DEFAULT_IDEMPOTENCY_KEY))
                 .withRequestContext(requestContext)
                 .build();
     }
@@ -53,6 +56,7 @@ class ShortenUrlHandlerTest {
     private static APIGatewayV2HTTPEvent anonymousEventWithBody(String body) {
         return APIGatewayV2HTTPEvent.builder()
                 .withBody(body)
+                .withHeaders(Map.of("idempotency-key", DEFAULT_IDEMPOTENCY_KEY))
                 .build();
     }
 
@@ -176,6 +180,17 @@ class ShortenUrlHandlerTest {
         ArgumentCaptor<ShortUrl> captor = ArgumentCaptor.forClass(ShortUrl.class);
         verify(urlRepository).save(captor.capture());
         assertEquals(longUrl, captor.getValue().longUrl());
+    }
+
+    @Test
+    void handleRequest_missingIdempotencyKeyHeader_returns400() {
+        APIGatewayV2HTTPEvent event = APIGatewayV2HTTPEvent.builder()
+                .withBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}")
+                .build();
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
+
+        assertEquals(400, response.getStatusCode());
     }
 
     @Test

@@ -5,7 +5,8 @@
   "rawQueryString": "",
   "headers": {
     "content-type": "application/json",
-    "user-agent": "Custom User Agent String"
+    "user-agent": "Custom User Agent String",
+    "idempotency-key": "66666666-7777-8888-9999-000000000000"
   },
   "requestContext": {
     "accountId": "123456789012",

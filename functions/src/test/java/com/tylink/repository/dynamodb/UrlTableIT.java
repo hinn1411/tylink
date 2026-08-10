@@ -1,4 +1,4 @@
-package com.tylink.integration;
+package com.tylink.repository.dynamodb;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -37,6 +37,7 @@ class UrlTableIT {
     private static final String TABLE_NAME = "UrlTable";
 
     @Container
+    @SuppressWarnings("resource") // lifecycle managed by @Testcontainers/@Container, not a leak
     private static final GenericContainer<?> DYNAMODB_LOCAL =
             new GenericContainer<>("amazon/dynamodb-local:latest").withExposedPorts(8000);
 

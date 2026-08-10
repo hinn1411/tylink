@@ -88,8 +88,8 @@ trade-offs.
 
 ### Implementation status
 
-`ShortenUrlHandler`, `RedirectUrlHandler`, and `ListUrlsHandler` are fully wired. Update and
-delete are not implemented — check the handler before relying on either.
+`ShortenUrlHandler`, `RedirectUrlHandler`, `ListUrlsHandler`, `DeleteUrlHandler`, and
+`UpdateUrlHandler` are all fully wired.
 
 ### Validation and response conventions
 
