@@ -24,13 +24,10 @@ Parameters:
     Type: String
     NoEcho: true
     Description: >
-      Google OAuth client secret. AWS::Cognito::UserPoolIdentityProvider isn't on CloudFormation's
-      ssm-secure allowlist (RDS/IAM/ElastiCache/etc. only), so it can't be resolved via an ssm-secure
-      dynamic reference like a supported resource could. Supply this at deploy time from the
-      SecureString already in SSM, e.g.:
-      sam deploy --parameter-overrides GoogleClientSecret=$(aws ssm get-parameter --name
-      /tylink/google-oauth-client-secret --with-decryption --query Parameter.Value --output text)
-      Never hardcode a value here or in samconfig.toml (both are committed to git).
+      Google OAuth client secret. CloudFormation can't resolve an ssm-secure dynamic reference for
+      AWS::Cognito::UserPoolIdentityProvider, so a script supplying this at deploy time (see
+      scripts/deploy.sh) is required. Never hardcode a value here or in samconfig.toml (both are
+      committed to git).
 
 Resources:
   UserPool:
@@ -96,11 +93,8 @@ Resources:
       ProviderName: Google
       ProviderType: Google
       ProviderDetails:
-        # client_id isn't sensitive, so a plain ssm dynamic reference (unrestricted) resolves it
-        # straight from SSM. client_secret can't use the equivalent ssm-secure reference — Cognito
-        # identity providers aren't on CloudFormation's ssm-secure resource allowlist — so it comes
-        # in via the GoogleClientSecret parameter instead (see Parameters: above for how to supply
-        # it from the same SSM SecureString at deploy time).
+        # client_id isn't sensitive, so a plain (non-secure) ssm dynamic reference works. secret
+        # can't — see GoogleClientSecret's Description above.
         client_id: "{{resolve:ssm:/tylink/google-oauth-client-id:1}}"
         client_secret: !Ref GoogleClientSecret
         authorize_scopes: "openid email profile"
