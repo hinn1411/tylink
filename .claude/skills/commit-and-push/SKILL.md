@@ -26,8 +26,18 @@ diff from step 1 actually backs that claim before committing to it:
 - Otherwise, compare the branch's `description` part (read as a short topic, e.g.
   `redirect-url` → redirect/decode functionality) against the diff (files touched, nature
   of the change). Only flag a *clear* topic divergence (e.g. a redirect-purposed branch
-  carrying a list-urls feature diff) — a small adjacent change touched while doing the
-  branch's main work is not a mismatch.
+  carrying a list-urls feature diff, or a large unrelated docs redesign landing on a
+  narrowly-scoped feature branch just because that happened to be checked out) — a small
+  adjacent change touched while doing the branch's main work is not a mismatch.
+  - Judge this from the diff itself, not from the branch's commit history. A prior
+    unrelated commit already on the branch is not precedent for adding another — that
+    usually means the branch already drifted and should have been caught then, not a
+    green light to keep going.
+  - Size/self-containedness is a signal, not just topic. If the diff is big enough to
+    need its own commit message that doesn't mention the branch's topic at all — a full
+    doc redesign, an unrelated refactor — ask "would this make sense as its own PR?" If
+    yes, it's a mismatch even though every individual file touched is plausible, and it
+    belongs on its own branch.
 
 If there's a mismatch (including the master/main case), do **not** commit to the current
 branch — sync and branch off master instead:
