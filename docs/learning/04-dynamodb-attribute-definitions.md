@@ -4,7 +4,7 @@
 
 `UrlTable` items actually carry more attributes than that — `longUrl`,
 `ownerId`, `visibility`, `status`, `createdAt`, `expiresAt`, `deletedAt`,
-`purgeAt` (see `../technical_decisions/04-dynamodb-access-patterns.md`'s
+`purgeAt` (see `../technical_decisions/05-dynamodb-access-patterns.md`'s
 Conclusion). None of those appear in `template.yaml`'s
 `AttributeDefinitions`. That's not an oversight, and it's not optional.
 

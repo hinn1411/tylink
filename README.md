@@ -85,7 +85,7 @@ mvn verify -Pintegration-test       # unit + integration tests — needs Docker 
 
 If `mvn verify -Pintegration-test` fails with a Testcontainers/Docker socket error, see
 `docs/technical_decisions/03-testcontainers-ryuk.md`. Integration tests are opt-in (see
-`docs/technical_decisions/06-integration-tests-as-profile.md`) since `sam build`'s containerized
+`docs/technical_decisions/07-integration-tests-as-profile.md`) since `sam build`'s containerized
 mode can't reach Docker for them.
 
 ## Deploy to AWS

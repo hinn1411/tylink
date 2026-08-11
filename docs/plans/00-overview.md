@@ -57,7 +57,7 @@ The project is split into 3 phases, documented one file per phase in this `plans
 |---|---|---|
 | N1 | **Explicit latency SLOs** (e.g. redirect p99 < 500ms server-side, CRUD p99 < 500ms) | Gives Phase 3 load-test results a pass/fail meaning instead of just numbers |
 | N2 | **Explicit availability target** (e.g. 99.9%) | Anchor for later discussing "what would get us to 99.99%" (Global Tables) without building it |
-| N3 | **Least-privilege IAM per Lambda** — one execution role per function, scoped to only what it touches | The 5 Phase 1 Lambdas (plus a 6th async cleanup function added in Phase 2) have very different blast radii (create vs delete vs redirect); a compromised redirect function shouldn't be able to delete data |
+| N3 | **Least-privilege IAM per Lambda** — one execution role per function, scoped to only what it touches | The 5 Phase 1 Lambdas have very different blast radii (create vs delete vs redirect); a compromised redirect function shouldn't be able to delete data |
 | N4 | **Decouple business logic from AWS infrastructure** | The prerequisite for meaningfully unit-testing a Java Lambda handler — without this boundary, "unit test" degenerates into mocking the DynamoDB SDK client directly |
 | N5 | **Cost guardrail**: AWS Budgets + SNS alert (~$15–20/mo) | Personal project; DAX/CloudFront/provisioned concurrency/a runaway retry loop can produce a surprise bill |
 | N6 | **Observability SLO** (e.g. mean-time-to-detect < 5 min via CloudWatch Alarms) | Turns "add monitoring" into a testable requirement |
@@ -72,7 +72,6 @@ The project is split into 3 phases, documented one file per phase in this `plans
 |---|---|---|
 | Amazon CloudFront (default `*.cloudfront.net`, no Route 53 yet) | Single entry point in front of API Gateway | Free tier: 1TB out + 10M requests/mo + 2M CloudFront Function invocations, **every month, permanently** (this became an ongoing always-free tier in Dec 2021, not just a 12-month trial). Gives you edge caching, and later a one-line swap to a custom domain, for ~$0 now |
 | AWS Systems Manager Parameter Store (SecureString) | Store the Google OAuth client secret | Free (Standard tier), vs Secrets Manager's ~$0.40/secret/mo |
-| AWS KMS — one customer-managed key (CMK) | (a) DynamoDB table encryption with a CMK instead of the AWS-owned default; (b) envelope-encrypt `longUrl` for a "private link" bonus feature | ~$1/mo flat — see `02-phase2-scaling.md` for why this is a real, not decorative, use case. Delete the key when done experimenting if you want $0 |
 | AWS Lambda Powertools for Java (v2+, not v1 — EOL Dec 2025) | Structured logging, X-Ray helpers, EMF custom metrics, **Idempotency utility** (backed by DynamoDB conditional writes) | Directly implements F4/N4/N6, and Java is first-class supported |
 | AWS X-Ray (active tracing) | End-to-end service map: API Gateway → Lambda → DynamoDB | Free tier: 100,000 traces/mo recorded, 1M retrieved |
 | CloudWatch Logs/Alarms/Dashboards + **Lambda Insights** extension | CPU/memory visibility (base Lambda metrics don't include this — Lambda Insights is the specific answer) | Directly answers the "CPU/mem" ask in the original stack |

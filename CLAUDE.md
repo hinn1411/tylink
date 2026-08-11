@@ -70,7 +70,7 @@ authenticated callers (`create`, `redirect`), and `NativeJwtAuthorizer` (native 
 that always require a caller (`list`). Handlers never see a raw JWT — they read identity via
 `AuthUtils.extractOwnerId(input)` (null means anonymous) or `extractOwnerIdFromJwtClaims(input)`
 depending on which authorizer sits in front of them. See
-`docs/technical_decisions/05-custom-jwt-authorizer.md` for why both exist.
+`docs/technical_decisions/06-custom-jwt-authorizer.md` for why both exist.
 
 ### Data model — single DynamoDB table, one item type
 
@@ -82,8 +82,8 @@ depending on which authorizer sits in front of them. See
 - `visibility` (`PUBLIC`/`PRIVATE`) and `status` (`ACTIVE`/`DELETED`) are plain attributes, not
   keys.
 
-See `docs/technical_decisions/04-dynamodb-access-patterns.md` for the access-pattern rationale
-and `08-list-urls-pagination-tradeoffs.md` for how `list` queries this GSI and its pagination
+See `docs/technical_decisions/05-dynamodb-access-patterns.md` for the access-pattern rationale
+and `09-list-urls-pagination-tradeoffs.md` for how `list` queries this GSI and its pagination
 trade-offs.
 
 ### Implementation status
@@ -94,7 +94,7 @@ trade-offs.
 ### Validation and response conventions
 
 - `LongUrlValidator.validate()` — strict URI validation; see
-  `docs/technical_decisions/07-longurl-validation.md` before adding denylist-style checks.
+  `docs/technical_decisions/08-longurl-validation.md` before adding denylist-style checks.
 - `RequestUtils.parseBody`/`jsonResponse` — the only place handlers touch Jackson or build an
   `APIGatewayV2HTTPResponse`; keep new handlers consistent with this rather than hand-rolling JSON.
 - `ShortCodeUtils.generate()`/`isValid()` — code generation + validation, shared by shorten and
@@ -112,7 +112,7 @@ trade-offs.
 `*Test.java` = unit tests (JUnit 5 + Mockito, no AWS/Docker — mock `UrlRepository`, not the
 DynamoDB SDK directly, per N4 in `docs/plans/00-overview.md`). `*IT.java` = integration tests
 against real DynamoDB Local via Testcontainers; not run by plain `mvn test`/`sam build`, opt in
-via `-Pintegration-test` (`docs/technical_decisions/06-integration-tests-as-profile.md`).
+via `-Pintegration-test` (`docs/technical_decisions/07-integration-tests-as-profile.md`).
 
 ## Conventions
 

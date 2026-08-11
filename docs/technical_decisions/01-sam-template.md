@@ -30,8 +30,8 @@ Powertools/AspectJ wiring.
 Use **Hello World Example With Powertools**.
 
 Both templates' generated `template.yaml` gets mostly discarded — Cognito,
-the single-table GSI design, HTTP API + JWT authorizer, CloudFront, and KMS
-are all hand-written regardless (see `04-cicd.md`). What actually matters is
+the single-table GSI design, HTTP API + JWT authorizer, and CloudFront are
+all hand-written regardless (see `04-cicd.md`). What actually matters is
 the `pom.xml`/AspectJ wiring and one working handler-to-jar build to clone
 for the remaining functions — the Powertools template provides that
 directly, while Serverless API's DynamoDB/handler conventions don't match

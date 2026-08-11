@@ -5,7 +5,7 @@ alongside the username/password login `LoginHandler` already implements. Federat
 redirect-based flow with no precedent yet in this codebase, so this doc builds up the OAuth2/OIDC
 concepts needed to understand it before touching `template.yaml`. It does not re-cover User Pool
 vs. Identity Pool or why the custom Lambda authorizer exists — see
-`05-cognito-and-lambda-authorizers.md` and `../technical_decisions/05-custom-jwt-authorizer.md`.
+`05-cognito-and-lambda-authorizers.md` and `../technical_decisions/06-custom-jwt-authorizer.md`.
 
 ---
 
@@ -241,5 +241,5 @@ exactly one issuer no matter how many upstream providers get added.
 - [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html)
 - [Cognito: Adding social identity providers](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-social-idp.html) — same link as `docs/plans/05-references.md`
 - [Cognito: OAuth 2.0 / Hosted UI endpoints](https://docs.aws.amazon.com/cognito/latest/developerguide/federation-endpoints.html)
-- `../technical_decisions/05-custom-jwt-authorizer.md` — why the custom Lambda authorizer exists
+- `../technical_decisions/06-custom-jwt-authorizer.md` — why the custom Lambda authorizer exists
 - `05-cognito-and-lambda-authorizers.md` — User Pool config, ID/access token quirk, authorizer flow

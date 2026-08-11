@@ -13,7 +13,6 @@
 - Cognito quotas: https://docs.aws.amazon.com/cognito/latest/developerguide/quotas.html
 - X-Ray + API Gateway service maps: https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-using-xray-maps.html
 - Lambda Powertools for Java: https://docs.aws.amazon.com/powertools/java/latest/
-- KMS envelope encryption: https://docs.aws.amazon.com/database-encryption-sdk/latest/devguide/using-kms.html
 - AWS SAM + GitHub Actions OIDC: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/deploying-with-oidc.html
 - Distributed Load Testing on AWS: https://docs.aws.amazon.com/solutions/distributed-load-testing-on-aws/
 - k6 docs: https://k6.io/docs/
