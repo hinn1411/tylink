@@ -14,7 +14,7 @@ Load testing runs as its own manually-triggered workflow, not on every commit (c
 
 Stick with SAM for the whole project — no CDK.
 
-- SAM is a CloudFormation superset, so anything CloudFormation can declare (CloudFront, KMS, Cognito) is expressible via raw `AWS::*` resource types even where SAM's shorthand doesn't natively cover it.
+- SAM is a CloudFormation superset, so anything CloudFormation can declare (CloudFront, Cognito) is expressible via raw `AWS::*` resource types even where SAM's shorthand doesn't natively cover it.
 - CDK's real advantage (L2 abstractions, imperative code, reusable constructs) pays off in large multi-stack, non-serverless-heavy setups (VPCs, ECS, RDS) — not here.
 - SAM's local tooling (`sam local start-api`, `sam local invoke`) is also better tuned to a Lambda-first workflow.
 

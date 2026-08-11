@@ -94,7 +94,7 @@ no Docker socket mounted in — so `mvn clean install` would fail there if
 `UrlTableIT` ran by default. `maven-failsafe-plugin`'s execution lives in an
 opt-in `integration-test` profile instead: `mvn test` runs only `*Test.java`
 (no Docker needed), and `mvn verify -Pintegration-test` runs both. See
-`docs/technical_decisions/06-integration-tests-as-profile.md` for the full
+`docs/technical_decisions/07-integration-tests-as-profile.md` for the full
 root-cause writeup and `03-testcontainers-ryuk.md` for a related Docker
 Desktop gotcha.
 
@@ -107,7 +107,7 @@ Desktop gotcha.
   Docker-based engine instead of an in-memory stand-in
 - Google Testing Blog, ["Test Sizes"][google-test-sizes] — an alternate
   small/medium/large framing that maps closely to unit/integration/e2e
-- `docs/technical_decisions/06-integration-tests-as-profile.md` — why
+- `docs/technical_decisions/07-integration-tests-as-profile.md` — why
   integration tests are a separate Maven profile in this repo specifically
 
 [fowler-unit]: https://martinfowler.com/bliki/UnitTest.html

@@ -1,7 +1,7 @@
 # Cognito Features Behind the Extract-Token Lambda Authorizer
 
 Which Cognito pieces `ExtractTokenAuthorizerFunction` depends on, and how `template.yaml` wires them
-together. See `../technical_decisions/05-custom-jwt-authorizer.md` for *why* the authorizer exists.
+together. See `../technical_decisions/06-custom-jwt-authorizer.md` for *why* the authorizer exists.
 
 ---
 
@@ -127,4 +127,4 @@ code. Not used here because it's all-or-nothing per route: a missing/invalid tok
 before any Lambda runs, with no way to say "verify if present, otherwise continue as anonymous."
 `POST /v1/urls` needs exactly that, since it accepts both anonymous (`PUBLIC`) and authenticated
 (`PRIVATE`) requests on the same route. Full reasoning in
-`../technical_decisions/05-custom-jwt-authorizer.md`.
+`../technical_decisions/06-custom-jwt-authorizer.md`.

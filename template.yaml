@@ -149,7 +149,7 @@ Resources:
           # token, ExtractTokenAuthorizerFunction verifies it and passes the caller's id
           # through as `ownerId` in the authorizer context; downstream handlers read that
           # via requestContext.authorizer.lambda, never a raw JWT. See
-          # docs/technical_decisions/04-dynamodb-access-patterns.md.
+          # docs/technical_decisions/05-dynamodb-access-patterns.md.
           ExtractTokenAuthorizer:
             FunctionArn: !GetAtt ExtractTokenAuthorizerFunction.Arn
             AuthorizerPayloadFormatVersion: "2.0"
@@ -196,7 +196,7 @@ Resources:
   # Separate from UrlTable deliberately — keeps UrlTable's single-item-type shape intact, and
   # Powertools' DynamoDBPersistenceStore assumes a HASH-only key schema (UrlTable's SK range key
   # would need extra withSortKeyAttr/withStaticPkValue config for no real benefit). See
-  # docs/technical_decisions/09-idempotency-payload-validation.md.
+  # docs/technical_decisions/10-idempotency-payload-validation.md.
   IdempotencyTable:
     Type: AWS::DynamoDB::Table
     Properties:
