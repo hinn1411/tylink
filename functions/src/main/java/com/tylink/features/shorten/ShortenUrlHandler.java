@@ -15,6 +15,7 @@ import com.tylink.repository.UrlRepositoryException;
 import com.tylink.utils.LongUrlValidator;
 import com.tylink.utils.RequestUtils;
 import com.tylink.utils.ShortCodeUtils;
+import com.tylink.utils.TracingUtils;
 import com.tylink.utils.TylinkResultCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,10 +47,11 @@ public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, 
     private final UrlRepository urlRepository;
 
     public ShortenUrlHandler() {
-        this(new DynamoDbUrlRepository(DynamoDbClient.create(), System.getenv("TABLE_NAME")));
+        this(new DynamoDbUrlRepository(createDynamoDbClient(), System.getenv("TABLE_NAME")));
         Idempotency.config()
                 .withPersistenceStore(DynamoDBPersistenceStore.builder()
                         .withTableName(System.getenv("IDEMPOTENCY_TABLE_NAME"))
+                        .withDynamoDbClient(createDynamoDbClient())
                         .build())
                 .withConfig(IdempotencyConfig.builder()
                         .withEventKeyJMESPath("idempotencyKey")
@@ -61,6 +63,12 @@ public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, 
 
     ShortenUrlHandler(UrlRepository urlRepository) {
         this.urlRepository = urlRepository;
+    }
+
+    private static DynamoDbClient createDynamoDbClient() {
+        return DynamoDbClient.builder()
+                .overrideConfiguration(TracingUtils.xrayOverrideConfiguration())
+                .build();
     }
 
     @Logging(logEvent = true)

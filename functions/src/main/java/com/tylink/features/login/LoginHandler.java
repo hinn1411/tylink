@@ -6,6 +6,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 import com.tylink.features.login.models.LoginRequest;
 import com.tylink.utils.RequestUtils;
+import com.tylink.utils.TracingUtils;
 import com.tylink.utils.TylinkResultCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,7 +34,10 @@ public class LoginHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGa
     private final String clientId;
 
     public LoginHandler() {
-        this(CognitoIdentityProviderClient.create(), System.getenv("USER_POOL_CLIENT_ID"));
+        this(CognitoIdentityProviderClient.builder()
+                        .overrideConfiguration(TracingUtils.xrayOverrideConfiguration())
+                        .build(),
+                System.getenv("USER_POOL_CLIENT_ID"));
     }
 
     LoginHandler(CognitoIdentityProviderClient cognitoClient, String clientId) {

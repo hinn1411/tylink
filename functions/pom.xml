@@ -18,6 +18,7 @@
         <jwks-rsa.version>0.22.1</jwks-rsa.version>
         <awssdk.bom.version>2.42.15</awssdk.bom.version>
         <testcontainers.bom.version>1.21.3</testcontainers.bom.version>
+        <aws-xray-recorder.version>2.18.2</aws-xray-recorder.version>
     </properties>
 
     <dependencyManagement>
@@ -82,6 +83,11 @@
         <dependency>
           <groupId>software.amazon.awssdk</groupId>
           <artifactId>cognitoidentityprovider</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>com.amazonaws</groupId>
+          <artifactId>aws-xray-recorder-sdk-aws-sdk-v2</artifactId>
+          <version>${aws-xray-recorder.version}</version>
         </dependency>
         <!-- Used by custom Lambda authorizer-->
         <dependency>

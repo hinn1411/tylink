@@ -4,6 +4,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2CustomAuthorizerEvent;
 import com.tylink.utils.RequestUtils;
+import com.tylink.utils.TracingUtils;
 import com.tylink.utils.TylinkResultCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -52,6 +53,9 @@ public class ExtractTokenAuthorizerHandler implements RequestHandler<APIGatewayV
         response.put("isAuthorized", true);
         Map<String, String> authContext = new HashMap<>();
         authContext.put("sub", sub.orElse(""));
+        // HTTP API does not support X-ray. So passing this attribute to lambda
+        // to trace slow requests
+        authContext.put("authorizerTraceId", Optional.ofNullable(TracingUtils.currentTraceId()).orElse(""));
         response.put("context", authContext);
         return response;
     }

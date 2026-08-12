@@ -10,6 +10,7 @@ import com.tylink.repository.UrlRepository;
 import com.tylink.repository.UrlRepositoryException;
 import com.tylink.utils.RequestUtils;
 import com.tylink.utils.ShortCodeUtils;
+import com.tylink.utils.TracingUtils;
 import com.tylink.utils.TylinkResultCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,7 +28,9 @@ public class DeleteUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
     private final UrlRepository urlRepository;
 
     public DeleteUrlHandler() {
-        this(new DynamoDbUrlRepository(DynamoDbClient.create(), System.getenv("TABLE_NAME")));
+        this(new DynamoDbUrlRepository(
+                DynamoDbClient.builder().overrideConfiguration(TracingUtils.xrayOverrideConfiguration()).build(),
+                System.getenv("TABLE_NAME")));
     }
 
     DeleteUrlHandler(UrlRepository urlRepository) {

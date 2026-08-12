@@ -14,6 +14,8 @@ Globals:
     Timeout: 20
     MemorySize: 512
     Tracing: Active
+    Layers:
+      - arn:aws:lambda:us-east-1:580247275435:layer:LambdaInsightsExtension:66
     Environment:
       Variables:
         POWERTOOLS_LOG_LEVEL: INFO
@@ -25,10 +27,8 @@ Parameters:
     Type: String
     NoEcho: true
     Description: >
-      Google OAuth client secret. CloudFormation can't resolve an ssm-secure dynamic reference for
-      AWS::Cognito::UserPoolIdentityProvider, so a script supplying this at deploy time (see
-      scripts/deploy.sh) is required. Never hardcode a value here or in samconfig.toml (both are
-      committed to git).
+      Google OAuth client secret. CF can't resolve an ssm-secure dynamic reference for
+      AWS::Cognito::UserPoolIdentityProvider
 
 Resources:
   UserPool:
@@ -94,8 +94,6 @@ Resources:
       ProviderName: Google
       ProviderType: Google
       ProviderDetails:
-        # client_id isn't sensitive, so a plain (non-secure) ssm dynamic reference works. secret
-        # can't — see GoogleClientSecret's Description above.
         client_id: "{{resolve:ssm:/tylink/google-oauth-client-id:1}}"
         client_secret: !Ref GoogleClientSecret
         authorize_scopes: "openid email profile"
@@ -111,6 +109,8 @@ Resources:
         Variables:
           USER_POOL_ID: !Ref UserPool
           USER_POOL_CLIENT_ID: !Ref UserPoolClient
+      Policies:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
 
   LoginFunction:
     Type: AWS::Serverless::Function
@@ -125,6 +125,7 @@ Resources:
             - Effect: Allow
               Action: cognito-idp:InitiateAuth
               Resource: !GetAtt UserPool.Arn
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
       Events:
         # Public route, no Authorizer
         Login:
@@ -134,30 +135,31 @@ Resources:
             Path: /v1/auth/login
             Method: post
 
-  # Explicit HTTP API (rather than the implicit one SAM would otherwise create from the
-  # functions' Events blocks) so routes can opt into the custom authorizer below. Every
-  # HttpApi event must reference ApiId: !Ref HttpApi, or SAM implicitly creates a second,
-  # separate API for whichever routes omit it.
+  # Explicit HTTP API for using custom authorizer
   HttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
       Auth:
         Authorizers:
-          # REQUEST-type Lambda authorizer, not a native JWT authorizer: it never denies a
-          # request (isAuthorized is always true), so routes behind it stay reachable by
-          # anonymous callers — something a native JWT authorizer can't express (it's
-          # all-or-nothing per route). When the Authorization header carries a valid Cognito
-          # token, ExtractTokenAuthorizerFunction verifies it and passes the caller's id
-          # through as `sub` in the authorizer context; downstream handlers read that
-          # via requestContext.authorizer.lambda, never a raw JWT. See
-          # docs/technical_decisions/05-dynamodb-access-patterns.md.
+          # Allow all traffic, only extract token
           ExtractTokenAuthorizer:
             FunctionArn: !GetAtt ExtractTokenAuthorizerFunction.Arn
             AuthorizerPayloadFormatVersion: "2.0"
             EnableSimpleResponses: true
+            # Identity source is $context.routeKey (API Gateway-synthesized, never client-
+            # supplied), not the Authorization header: a declared header identity source makes
+            # API Gateway treat it as required and reject anonymous requests with a 401 before
+            # ever invoking the Lambda — defeating "never denies a request." routeKey is always
+            # present once a route matches, so this identity source can never be "missing,"
+            # meaning API Gateway invokes this authorizer unconditionally on every call.
+            # (Omitting Identity entirely looks equivalent on paper, but API Gateway's OpenAPI
+            # reimport doesn't reliably clear a previously-set identitySource just because a
+            # redeploy's definition is silent about it — verified live: after removing the
+            # Identity block and redeploying, GET /authorizers still showed the old
+            # $request.header.Authorization until explicitly overwritten with a new value.)
             Identity:
-              Headers:
-                - Authorization
+              Context:
+                - routeKey
           # Native authorizer, only accepts valid token. Otherwise, rejects all.
           NativeJwtAuthorizer:
             JwtConfiguration:
@@ -165,6 +167,15 @@ Resources:
               audience:
                 - !Ref UserPoolClient
             IdentitySource: "$request.header.Authorization"
+
+  # SAM does not generate permission for custom authorizer automatically
+  ExtractTokenAuthorizerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ExtractTokenAuthorizerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/authorizers/*"
 
   UrlTable:
     Type: AWS::DynamoDB::Table
@@ -194,10 +205,7 @@ Resources:
           Projection:
             ProjectionType: ALL
 
-  # Separate from UrlTable deliberately — keeps UrlTable's single-item-type shape intact, and
-  # Powertools' DynamoDBPersistenceStore assumes a HASH-only key schema (UrlTable's SK range key
-  # would need extra withSortKeyAttr/withStaticPkValue config for no real benefit). See
-  # docs/technical_decisions/10-idempotency-payload-validation.md.
+  # Required by Powertools' Idempotent module
   IdempotencyTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -226,6 +234,7 @@ Resources:
             TableName: !Ref UrlTable
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
       Events:
         ShortenUrl:
           Type: HttpApi
@@ -247,6 +256,7 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref UrlTable
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
       Events:
         RedirectUrl:
           Type: HttpApi
@@ -268,6 +278,7 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref UrlTable
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
       Events:
         ListUrls:
           Type: HttpApi
@@ -289,6 +300,7 @@ Resources:
       Policies:
         - DynamoDBWritePolicy:
             TableName: !Ref UrlTable
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
       Events:
         DeleteUrl:
           Type: HttpApi
@@ -312,6 +324,7 @@ Resources:
             TableName: !Ref UrlTable
         - DynamoDBWritePolicy:
             TableName: !Ref UrlTable
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
       Events:
         UpdateUrl:
           Type: HttpApi
