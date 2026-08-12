@@ -18,6 +18,7 @@ Globals:
       Variables:
         POWERTOOLS_LOG_LEVEL: INFO
         POWERTOOLS_SERVICE_NAME: tylink
+        POWERTOOLS_METRICS_NAMESPACE: tylink
 
 Parameters:
   GoogleClientSecret:
@@ -147,7 +148,7 @@ Resources:
           # anonymous callers — something a native JWT authorizer can't express (it's
           # all-or-nothing per route). When the Authorization header carries a valid Cognito
           # token, ExtractTokenAuthorizerFunction verifies it and passes the caller's id
-          # through as `ownerId` in the authorizer context; downstream handlers read that
+          # through as `sub` in the authorizer context; downstream handlers read that
           # via requestContext.authorizer.lambda, never a raw JWT. See
           # docs/technical_decisions/05-dynamodb-access-patterns.md.
           ExtractTokenAuthorizer:
@@ -321,6 +322,21 @@ Resources:
             Auth:
               Authorizer: NativeJwtAuthorizer
 
+  # Nested stack for dashboards
+  DashboardStack:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: infrastructures/dashboards.yaml
+      Parameters:
+        RootStackName: !Ref AWS::StackName
+        ShortenUrlFunctionName: !Ref ShortenUrlFunction
+        RedirectUrlFunctionName: !Ref RedirectUrlFunction
+        ListUrlsFunctionName: !Ref ListUrlsFunction
+        UpdateUrlFunctionName: !Ref UpdateUrlFunction
+        DeleteUrlFunctionName: !Ref DeleteUrlFunction
+        LoginFunctionName: !Ref LoginFunction
+        ExtractTokenAuthorizerFunctionName: !Ref ExtractTokenAuthorizerFunction
+
 Outputs:
   HttpApiUrl:
     Description: "Base URL for the tylink HTTP API"
@@ -394,3 +410,9 @@ Outputs:
   UserPoolClientId:
     Description: "Cognito User Pool App Client ID"
     Value: !Ref UserPoolClient
+  LambdaDurationDashboardUrl:
+    Description: "CloudWatch Dashboard - Lambda Duration Percentiles"
+    Value: !GetAtt DashboardStack.Outputs.LambdaDurationDashboardUrl
+  CustomMetricsDashboardUrl:
+    Description: "CloudWatch Dashboard - Custom EMF Metrics (ColdStart, IdempotencyMiss, ShortCodeCollisionRetries)"
+    Value: !GetAtt DashboardStack.Outputs.CustomMetricsDashboardUrl

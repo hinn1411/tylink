@@ -85,6 +85,36 @@ class DynamoDbUrlRepositoryTest {
     }
 
     @Test
+    void save_validShortUrl_returnsTrue() {
+        when(dynamoDb.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
+
+        boolean saved = repository.save(ShortUrl.create("abc1234", "https://example.com/x", null, Visibility.PUBLIC));
+
+        assertTrue(saved);
+    }
+
+    @Test
+    void save_validShortUrl_setsAttributeNotExistsConditionExpression() {
+        when(dynamoDb.putItem(any(PutItemRequest.class))).thenReturn(PutItemResponse.builder().build());
+
+        repository.save(ShortUrl.create("abc1234", "https://example.com/x", null, Visibility.PUBLIC));
+
+        ArgumentCaptor<PutItemRequest> captor = ArgumentCaptor.forClass(PutItemRequest.class);
+        verify(dynamoDb).putItem(captor.capture());
+        assertEquals("attribute_not_exists(PK)", captor.getValue().conditionExpression());
+    }
+
+    @Test
+    void save_conditionalCheckFails_returnsFalseWithoutThrowing() {
+        when(dynamoDb.putItem(any(PutItemRequest.class)))
+                .thenThrow(ConditionalCheckFailedException.builder().message("condition failed").build());
+
+        boolean saved = repository.save(ShortUrl.create("abc1234", "https://example.com/x", null, Visibility.PUBLIC));
+
+        assertFalse(saved);
+    }
+
+    @Test
     void save_validShortUrl_putsCorePkSkAndStatusFields() {
         Map<String, AttributeValue> item = savedItem(ShortUrl.create("abc1234", "https://example.com/x", null, Visibility.PUBLIC));
 

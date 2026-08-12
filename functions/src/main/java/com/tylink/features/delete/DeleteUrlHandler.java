@@ -10,10 +10,12 @@ import com.tylink.repository.UrlRepository;
 import com.tylink.repository.UrlRepositoryException;
 import com.tylink.utils.RequestUtils;
 import com.tylink.utils.ShortCodeUtils;
+import com.tylink.utils.TylinkResultCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.lambda.powertools.logging.Logging;
+import software.amazon.lambda.powertools.metrics.FlushMetrics;
 
 import java.util.Map;
 import java.util.Optional;
@@ -33,17 +35,18 @@ public class DeleteUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
     }
 
     @Logging(logEvent = true)
+    @FlushMetrics(captureColdStart = true)
     @Override
     public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent input, Context context) {
         String shortCode = Optional.ofNullable(input.getPathParameters())
                 .map(params -> params.get("shortCode"))
                 .orElse(null);
-        String ownerId = AuthUtils.extractOwnerIdFromJwtClaims(input);
+        String ownerId = AuthUtils.extractOwnerId(input);
         log.info("Received delete request for shortCode={}", shortCode);
 
         if (!ShortCodeUtils.isValid(shortCode)) {
             log.warn("Rejected delete request: malformed shortCode={}", shortCode);
-            return RequestUtils.notFound();
+            return RequestUtils.errorResponse(TylinkResultCode.DELETE_NOT_FOUND);
         }
 
         boolean deleted;
@@ -51,15 +54,15 @@ public class DeleteUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
             deleted = urlRepository.markDeleted(shortCode, ownerId);
         } catch (UrlRepositoryException e) {
             log.error("Failed to delete shortCode={} in DynamoDB", shortCode, e);
-            return RequestUtils.jsonResponse(500, Map.of("message", "failed to delete short url"));
+            return RequestUtils.errorResponse(TylinkResultCode.DELETE_FAILED);
         }
 
         if (!deleted) {
             log.info("shortCode={} not found or not owned by caller", shortCode);
-            return RequestUtils.notFound();
+            return RequestUtils.errorResponse(TylinkResultCode.DELETE_NOT_FOUND);
         }
 
         log.info("Deleted shortCode={}", shortCode);
-        return RequestUtils.jsonResponse(410, Map.of("message", "short url deleted"));
+        return RequestUtils.successResponse(410, Map.of("message", "short url deleted"));
     }
 }

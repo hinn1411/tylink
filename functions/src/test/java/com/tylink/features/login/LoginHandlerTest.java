@@ -67,6 +67,15 @@ class LoginHandlerTest {
     }
 
     @Test
+    void handleRequest_missingUsername_bodyContainsResultCode651() {
+        APIGatewayV2HTTPEvent event = eventWithBody("{\"password\": \"secret123\"}");
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
+
+        assertTrue(response.getBody().contains("\"code\":651"));
+    }
+
+    @Test
     void handleRequest_missingPassword_returns400() {
         APIGatewayV2HTTPEvent event = eventWithBody("{\"username\": \"user@example.com\"}");
 

@@ -61,6 +61,11 @@
           <version>${powertools.version}</version>
         </dependency>
         <dependency>
+          <groupId>software.amazon.lambda</groupId>
+          <artifactId>powertools-metrics</artifactId>
+          <version>${powertools.version}</version>
+        </dependency>
+        <dependency>
           <groupId>org.aspectj</groupId>
           <artifactId>aspectjrt</artifactId>
           <version>${aspectj.version}</version>
@@ -147,6 +152,10 @@
                 <groupId>software.amazon.lambda</groupId>
                 <artifactId>powertools-idempotency-core</artifactId>
               </aspectLibrary>
+              <aspectLibrary>
+                <groupId>software.amazon.lambda</groupId>
+                <artifactId>powertools-metrics</artifactId>
+              </aspectLibrary>
             </aspectLibraries>
           </configuration>
           <dependencies>
@@ -171,9 +180,14 @@
           <version>3.2.5</version>
           <configuration>
             <!-- Makes @Idempotent a no-op passthrough for unit tests, so ShortenUrlHandlerTest
-                 doesn't need DynamoDB/Docker (N4) to exercise the write path it wraps. -->
+                 doesn't need DynamoDB/Docker (N4) to exercise the write path it wraps.
+                 POWERTOOLS_METRICS_NAMESPACE/POWERTOOLS_SERVICE_NAME give @FlushMetrics
+                 deterministic output under `mvn test` the same way template.yaml's Globals do
+                 at runtime. -->
             <environmentVariables>
               <POWERTOOLS_IDEMPOTENCY_DISABLED>true</POWERTOOLS_IDEMPOTENCY_DISABLED>
+              <POWERTOOLS_METRICS_NAMESPACE>tylink</POWERTOOLS_METRICS_NAMESPACE>
+              <POWERTOOLS_SERVICE_NAME>tylink</POWERTOOLS_SERVICE_NAME>
             </environmentVariables>
           </configuration>
         </plugin>

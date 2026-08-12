@@ -13,12 +13,15 @@ import org.mockito.ArgumentCaptor;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class ShortenUrlHandlerTest {
 
@@ -30,6 +33,7 @@ class ShortenUrlHandlerTest {
     @BeforeEach
     void setUp() {
         urlRepository = mock(UrlRepository.class);
+        when(urlRepository.save(any(ShortUrl.class))).thenReturn(true);
         handler = new ShortenUrlHandler(urlRepository);
     }
 
@@ -40,7 +44,7 @@ class ShortenUrlHandlerTest {
     private APIGatewayV2HTTPEvent eventWithOwnerId(String body, String ownerId) {
         APIGatewayV2HTTPEvent.RequestContext.Authorizer authorizer =
                 APIGatewayV2HTTPEvent.RequestContext.Authorizer.builder()
-                        .withLambda(Map.of("ownerId", ownerId))
+                        .withLambda(Map.of("sub", ownerId))
                         .build();
         APIGatewayV2HTTPEvent.RequestContext requestContext =
                 APIGatewayV2HTTPEvent.RequestContext.builder()
@@ -129,6 +133,15 @@ class ShortenUrlHandlerTest {
     }
 
     @Test
+    void handleRequest_missingLongUrl_bodyContainsResultCode601() {
+        APIGatewayV2HTTPEvent event = eventWithOwnerId("{}", "11111111-1111-1111-1111-111111111111");
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
+
+        assertTrue(response.getBody().contains("\"code\":601"));
+    }
+
+    @Test
     void handleRequest_invalidVisibility_returns400() {
         APIGatewayV2HTTPEvent event = eventWithOwnerId(
                 "{\"longUrl\": \"https://example.com/x\", \"visibility\": \"SECRET\"}",
@@ -203,5 +216,31 @@ class ShortenUrlHandlerTest {
         APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
 
         assertEquals(500, response.getStatusCode());
+    }
+
+    @Test
+    void createUrlIdempotent_firstCodeCollides_retriesAndSucceeds() {
+        when(urlRepository.save(any(ShortUrl.class))).thenReturn(false, true);
+        APIGatewayV2HTTPEvent event =
+                anonymousEventWithBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}");
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
+
+        assertEquals(201, response.getStatusCode());
+        ArgumentCaptor<ShortUrl> captor = ArgumentCaptor.forClass(ShortUrl.class);
+        verify(urlRepository, times(2)).save(captor.capture());
+        assertNotEquals(captor.getAllValues().get(0).shortCode(), captor.getAllValues().get(1).shortCode());
+    }
+
+    @Test
+    void createUrlIdempotent_allAttemptsCollide_returns500() {
+        when(urlRepository.save(any(ShortUrl.class))).thenReturn(false);
+        APIGatewayV2HTTPEvent event =
+                anonymousEventWithBody("{\"longUrl\": \"https://example.com/some/very/long/path\"}");
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(event, null);
+
+        assertEquals(500, response.getStatusCode());
+        verify(urlRepository, times(ShortenUrlHandler.MAX_SHORT_CODE_ATTEMPTS)).save(any(ShortUrl.class));
     }
 }

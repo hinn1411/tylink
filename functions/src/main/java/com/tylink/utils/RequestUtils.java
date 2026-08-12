@@ -7,20 +7,46 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.utils.StringUtils;
+import software.amazon.lambda.powertools.metrics.Metrics;
+import software.amazon.lambda.powertools.metrics.MetricsFactory;
+import software.amazon.lambda.powertools.metrics.model.DimensionSet;
+import software.amazon.lambda.powertools.metrics.model.MetricUnit;
 
 import java.util.Map;
+import java.util.Optional;
 
 public final class RequestUtils {
 
     private static final Logger log = LogManager.getLogger(RequestUtils.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final Map<String, String> NOT_FOUND_BODY = Map.of("message", "Short url not found");
+    private static final Metrics metrics = MetricsFactory.getMetricsInstance();
+    // AWS_LAMBDA_FUNCTION_NAME is only set by Lambda at runtime; "unknown"
+    // is a fallback
+    private static final String FUNCTION_NAME = Optional.ofNullable(System.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+            .orElse("unknown");
 
     private RequestUtils() {
     }
 
-    public static APIGatewayV2HTTPResponse notFound() {
-        return jsonResponse(404, NOT_FOUND_BODY);
+    public static APIGatewayV2HTTPResponse errorResponse(TylinkResultCode code) {
+        emitResult(code);
+        return jsonResponse(code.httpStatus(), Map.of("message", code.message(), "code", code.code()));
+    }
+
+    public static void recordSuccess(TylinkResultCode code) {
+        emitResult(code);
+    }
+
+    public static APIGatewayV2HTTPResponse successResponse(int statusCode, Object body) {
+        emitResult(TylinkResultCode.SUCCESS);
+        return jsonResponse(statusCode, body);
+    }
+
+    private static void emitResult(TylinkResultCode code) {
+        metrics.flushMetrics(m -> {
+            m.addDimension(DimensionSet.of("FunctionName", FUNCTION_NAME, "ResultCode", code.name()));
+            m.addMetric("RequestResult", 1, MetricUnit.COUNT);
+        });
     }
 
     public static String getHeader(APIGatewayV2HTTPEvent input, String name) {

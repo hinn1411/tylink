@@ -111,6 +111,14 @@ class ListUrlsHandlerTest {
     }
 
     @Test
+    void handleRequest_limitInvalid_bodyContainsResultCode620() {
+        APIGatewayV2HTTPResponse response =
+                handler.handleRequest(eventFor(OWNER_ID, Map.of("limit", "abc")), null);
+
+        assertTrue(response.getBody().contains("\"code\":620"));
+    }
+
+    @Test
     void handleRequest_cursorQueryParamProvided_passesCursorToRepository() {
         when(urlRepository.listByOwner(eq(OWNER_ID), anyInt(), any()))
                 .thenReturn(new UrlPage(List.of(), null));

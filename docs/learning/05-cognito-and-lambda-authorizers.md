@@ -59,7 +59,7 @@ fetched once and cached:
 - **Audience (`aud` / `client_id`)** — ID tokens carry the standard `aud` claim; **access** tokens
   use a non-standard `client_id` claim instead (no `aud`) — a Cognito/OAuth quirk, which is why
   `isTrustedAudience()` branches on `token_use`.
-- **Subject (`sub`)** — the pool-assigned, immutable user id, forwarded as `ownerId`. TyLink never
+- **Subject (`sub`)** — the pool-assigned, immutable user id, forwarded as `sub`. TyLink never
   stores or compares email addresses for ownership.
 
 ## 5. Wiring in `template.yaml`
@@ -94,8 +94,8 @@ flowchart TD
         g2{"2. Signing key for token's kid<br/>already cached?"}
         g5["4. Verify signature, iss, aud/client_id<br/>against the key — locally, no Cognito call"]
         g6{"Token present & valid?"}
-        g7["5. context.ownerId = token's sub"]
-        g8["5. context.ownerId = '' (anonymous)"]
+        g7["5. context.sub = token's sub"]
+        g8["5. context.sub = '' (anonymous)"]
         g9["6. isAuthorized = true — always, regardless of g6"]
         g10(["7. Return {isAuthorized, context} to API Gateway"])
         g1 --> g2
@@ -116,7 +116,7 @@ flowchart TD
 
 The only runtime call to Cognito is the JWKS fetch on a cache miss (step 3); everything else is
 local. Step `g9` is the crux of the design: `isAuthorized` is `true` unconditionally — the `g6`
-branch only decides `context.ownerId`, never whether the request is let through. Reverse that (tie
+branch only decides `context.sub`, never whether the request is let through. Reverse that (tie
 `isAuthorized` to verification success) and every anonymous caller gets a 403 straight from API
 Gateway, `ShortenUrlFunction` never runs, and the authorizer stops being "optional."
 
