@@ -68,9 +68,10 @@ Two `HttpApi` authorizers, chosen per route by whether anonymous callers must be
 `ExtractTokenAuthorizerFunction` (custom, never denies) for routes needing both anonymous and
 authenticated callers (`create`, `redirect`), and `NativeJwtAuthorizer` (native JWT) for routes
 that always require a caller (`list`). Handlers never see a raw JWT — they read identity via
-`AuthUtils.extractOwnerId(input)` (null means anonymous) or `extractOwnerIdFromJwtClaims(input)`
-depending on which authorizer sits in front of them. See
-`docs/technical_decisions/06-custom-jwt-authorizer.md` for why both exist.
+`AuthUtils.extractOwnerId(input)` (null means anonymous), which checks both the custom Lambda
+authorizer's context and a native JWT authorizer's claims, so callers don't need to know which
+authorizer sits in front of them. See `docs/technical_decisions/06-custom-jwt-authorizer.md` for
+why both authorizer types exist.
 
 ### Data model — single DynamoDB table, one item type
 

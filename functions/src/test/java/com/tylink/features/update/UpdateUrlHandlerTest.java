@@ -117,6 +117,13 @@ class UpdateUrlHandlerTest {
     }
 
     @Test
+    void handleRequest_missingLongUrl_bodyContainsResultCode641() {
+        APIGatewayV2HTTPResponse response = handler.handleRequest(eventFor(SHORT_CODE, OWNER_ID, "{}"), null);
+
+        assertTrue(response.getBody().contains("\"code\":641"));
+    }
+
+    @Test
     void handleRequest_invalidLongUrlScheme_returns400() {
         APIGatewayV2HTTPResponse response =
                 handler.handleRequest(eventFor(SHORT_CODE, OWNER_ID, "{\"longUrl\": \"javascript:alert(1)\"}"), null);

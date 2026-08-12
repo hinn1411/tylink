@@ -13,10 +13,12 @@ import com.tylink.repository.pagination.UrlPage;
 import com.tylink.repository.UrlRepository;
 import com.tylink.repository.UrlRepositoryException;
 import com.tylink.utils.RequestUtils;
+import com.tylink.utils.TylinkResultCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.lambda.powertools.logging.Logging;
+import software.amazon.lambda.powertools.metrics.FlushMetrics;
 
 import java.util.Map;
 import java.util.Optional;
@@ -39,9 +41,10 @@ public class ListUrlsHandler implements RequestHandler<APIGatewayV2HTTPEvent, AP
     }
 
     @Logging(logEvent = true)
+    @FlushMetrics(captureColdStart = true)
     @Override
     public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent input, Context context) {
-        String ownerId = AuthUtils.extractOwnerIdFromJwtClaims(input);
+        String ownerId = AuthUtils.extractOwnerId(input);
         log.info("ownerId: {}", ownerId);
 
         Map<String, String> queryParams = Optional.ofNullable(input.getQueryStringParameters()).orElse(Map.of());
@@ -49,8 +52,7 @@ public class ListUrlsHandler implements RequestHandler<APIGatewayV2HTTPEvent, AP
         Integer limit = parseLimit(rawLimit);
         if (limit == null) {
             log.warn("Rejected list request: invalid limit={}", rawLimit);
-            return RequestUtils.jsonResponse(400,
-                    Map.of("message", "limit must be an integer between " + MIN_LIMIT + " and " + MAX_LIMIT));
+            return RequestUtils.errorResponse(TylinkResultCode.LIST_INVALID_LIMIT);
         }
         String cursor = queryParams.get("cursor");
 
@@ -59,13 +61,13 @@ public class ListUrlsHandler implements RequestHandler<APIGatewayV2HTTPEvent, AP
             page = urlRepository.listByOwner(ownerId, limit, cursor);
         } catch (InvalidCursorException e) {
             log.warn("Rejected list request: invalid cursor", e);
-            return RequestUtils.jsonResponse(400, Map.of("message", "invalid cursor"));
+            return RequestUtils.errorResponse(TylinkResultCode.LIST_INVALID_CURSOR);
         } catch (UrlRepositoryException e) {
             log.error("Failed to list URLs for ownerId={}", ownerId, e);
-            return RequestUtils.jsonResponse(500, Map.of("message", "failed to list urls"));
+            return RequestUtils.errorResponse(TylinkResultCode.LIST_FAILED);
         }
 
-        return RequestUtils.jsonResponse(200,
+        return RequestUtils.successResponse(200,
                 new ListUrlsResponse(UrlSummaryMapper.toSummaries(page.items()), page.nextCursor()));
     }
 

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -74,6 +75,13 @@ class DeleteUrlHandlerTest {
 
         assertEquals(404, response.getStatusCode());
         verify(urlRepository, never()).markDeleted(anyString(), anyString());
+    }
+
+    @Test
+    void handleRequest_malformedShortCode_bodyContainsResultCode630() {
+        APIGatewayV2HTTPResponse response = handler.handleRequest(eventFor("bad", OWNER_ID), null);
+
+        assertTrue(response.getBody().contains("\"code\":630"));
     }
 
     @Test

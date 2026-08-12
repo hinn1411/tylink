@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -38,7 +39,7 @@ class RedirectUrlHandlerTest {
     private APIGatewayV2HTTPEvent eventFor(String shortCode, String ownerId) {
         APIGatewayV2HTTPEvent.RequestContext.Authorizer authorizer =
                 APIGatewayV2HTTPEvent.RequestContext.Authorizer.builder()
-                        .withLambda(Map.of("ownerId", ownerId))
+                        .withLambda(Map.of("sub", ownerId))
                         .build();
         APIGatewayV2HTTPEvent.RequestContext requestContext =
                 APIGatewayV2HTTPEvent.RequestContext.builder()
@@ -121,6 +122,15 @@ class RedirectUrlHandlerTest {
         APIGatewayV2HTTPResponse response = handler.handleRequest(anonymousEventFor(SHORT_CODE), null);
 
         assertEquals(404, response.getStatusCode());
+    }
+
+    @Test
+    void handleRequest_shortCodeNotFound_bodyContainsResultCode610() {
+        when(urlRepository.findByShortCode(SHORT_CODE)).thenReturn(null);
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(anonymousEventFor(SHORT_CODE), null);
+
+        assertTrue(response.getBody().contains("\"code\":610"));
     }
 
     @Test
