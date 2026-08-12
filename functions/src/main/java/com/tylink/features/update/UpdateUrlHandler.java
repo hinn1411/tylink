@@ -14,11 +14,14 @@ import com.tylink.repository.UrlRepositoryException;
 import com.tylink.utils.LongUrlValidator;
 import com.tylink.utils.RequestUtils;
 import com.tylink.utils.ShortCodeUtils;
+import com.tylink.utils.TracingUtils;
+import com.tylink.utils.TylinkResultCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.utils.StringUtils;
 import software.amazon.lambda.powertools.logging.Logging;
+import software.amazon.lambda.powertools.metrics.FlushMetrics;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,7 +35,9 @@ public class UpdateUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
     private final UrlRepository urlRepository;
 
     public UpdateUrlHandler() {
-        this(new DynamoDbUrlRepository(DynamoDbClient.create(), System.getenv("TABLE_NAME")));
+        this(new DynamoDbUrlRepository(
+                DynamoDbClient.builder().overrideConfiguration(TracingUtils.xrayOverrideConfiguration()).build(),
+                System.getenv("TABLE_NAME")));
     }
 
     UpdateUrlHandler(UrlRepository urlRepository) {
@@ -40,28 +45,29 @@ public class UpdateUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
     }
 
     @Logging(logEvent = true)
+    @FlushMetrics(captureColdStart = true)
     @Override
     public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent input, Context context) {
         String shortCode = Optional.ofNullable(input.getPathParameters())
                 .map(params -> params.get("shortCode"))
                 .orElse(null);
-        String ownerId = AuthUtils.extractOwnerIdFromJwtClaims(input);
+        String ownerId = AuthUtils.extractOwnerId(input);
         log.info("Received update request for shortCode={}", shortCode);
 
         if (!ShortCodeUtils.isValid(shortCode)) {
             log.warn("Rejected update request: malformed shortCode={}", shortCode);
-            return RequestUtils.notFound();
+            return RequestUtils.errorResponse(TylinkResultCode.UPDATE_NOT_FOUND);
         }
 
         UpdateUrlRequest request = RequestUtils.parseBody(input.getBody(), UpdateUrlRequest.class);
         if (Objects.isNull(request) || StringUtils.isBlank(request.getLongUrl())) {
             log.error("Request body is empty or missing longUrl");
-            return RequestUtils.jsonResponse(400, Map.of("message", "longUrl is required"));
+            return RequestUtils.errorResponse(TylinkResultCode.UPDATE_LONG_URL_REQUIRED);
         }
         String longUrl = LongUrlValidator.validate(request.getLongUrl());
         if (Objects.isNull(longUrl)) {
             log.error("Raw URL: {} is invalid!", request.getLongUrl());
-            return RequestUtils.jsonResponse(400, Map.of("message", "longUrl must be a valid http or https URL"));
+            return RequestUtils.errorResponse(TylinkResultCode.UPDATE_INVALID_LONG_URL);
         }
 
         UpdateOutcome outcome;
@@ -69,7 +75,7 @@ public class UpdateUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
             outcome = urlRepository.updateLongUrl(shortCode, ownerId, longUrl);
         } catch (UrlRepositoryException e) {
             log.error("Failed to update shortCode={} in DynamoDB", shortCode, e);
-            return RequestUtils.jsonResponse(500, Map.of("message", "failed to update short url"));
+            return RequestUtils.errorResponse(TylinkResultCode.UPDATE_FAILED);
         }
 
         return toResponse(shortCode, outcome);
@@ -79,15 +85,15 @@ public class UpdateUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, A
         return switch (outcome.status()) {
             case NOT_FOUND -> {
                 log.info("shortCode={} not found or not owned by caller", shortCode);
-                yield RequestUtils.notFound();
+                yield RequestUtils.errorResponse(TylinkResultCode.UPDATE_NOT_FOUND);
             }
             case ALREADY_DELETED -> {
                 log.info("shortCode={} has been deleted, rejecting update", shortCode);
-                yield RequestUtils.jsonResponse(410, toResponseBody(outcome.shortUrl()));
+                yield RequestUtils.successResponse(410, toResponseBody(outcome.shortUrl()));
             }
             case UPDATED -> {
                 log.info("Updated shortCode={}", shortCode);
-                yield RequestUtils.jsonResponse(200, toResponseBody(outcome.shortUrl()));
+                yield RequestUtils.successResponse(200, toResponseBody(outcome.shortUrl()));
             }
         };
     }

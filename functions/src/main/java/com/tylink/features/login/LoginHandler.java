@@ -6,6 +6,8 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 import com.tylink.features.login.models.LoginRequest;
 import com.tylink.utils.RequestUtils;
+import com.tylink.utils.TracingUtils;
+import com.tylink.utils.TylinkResultCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -19,6 +21,7 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.NotAuthoriz
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoundException;
 import software.amazon.awssdk.utils.StringUtils;
 import software.amazon.lambda.powertools.logging.Logging;
+import software.amazon.lambda.powertools.metrics.FlushMetrics;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,13 +29,15 @@ import java.util.Map;
 public class LoginHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
 
     private static final Logger log = LogManager.getLogger(LoginHandler.class);
-    private static final Map<String, String> INVALID_CREDENTIALS_BODY = Map.of("message", "invalid username or password");
 
     private final CognitoIdentityProviderClient cognitoClient;
     private final String clientId;
 
     public LoginHandler() {
-        this(CognitoIdentityProviderClient.create(), System.getenv("USER_POOL_CLIENT_ID"));
+        this(CognitoIdentityProviderClient.builder()
+                        .overrideConfiguration(TracingUtils.xrayOverrideConfiguration())
+                        .build(),
+                System.getenv("USER_POOL_CLIENT_ID"));
     }
 
     LoginHandler(CognitoIdentityProviderClient cognitoClient, String clientId) {
@@ -43,20 +48,21 @@ public class LoginHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGa
     // Deliberately no logEvent = true will leak raw password
     // and Powertools event-logging would put it in CloudWatch.
     @Logging
+    @FlushMetrics(captureColdStart = true)
     @Override
     public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent input, Context context) {
         LoginRequest request = RequestUtils.parseBody(input.getBody(), LoginRequest.class);
         if (request == null) {
             log.error("Request body is empty!");
-            return RequestUtils.jsonResponse(400, Map.of("message", "invalid request body"));
+            return RequestUtils.errorResponse(TylinkResultCode.LOGIN_INVALID_REQUEST_BODY);
         }
         if (StringUtils.isBlank(request.getUsername())) {
             log.error("Username is empty!");
-            return RequestUtils.jsonResponse(400, Map.of("message", "username is required"));
+            return RequestUtils.errorResponse(TylinkResultCode.LOGIN_USERNAME_REQUIRED);
         }
         if (StringUtils.isBlank(request.getPassword())) {
             log.error("Password is empty!");
-            return RequestUtils.jsonResponse(400, Map.of("message", "password is required"));
+            return RequestUtils.errorResponse(TylinkResultCode.LOGIN_PASSWORD_REQUIRED);
         }
 
         return login(request.getUsername(), request.getPassword());
@@ -74,14 +80,14 @@ public class LoginHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGa
             authResponse = cognitoClient.initiateAuth(authRequest);
         } catch (NotAuthorizedException | UserNotFoundException e) {
             log.warn("Login attempt rejected. Cause by: {}", e.getClass().getSimpleName());
-            return RequestUtils.jsonResponse(401, INVALID_CREDENTIALS_BODY);
+            return RequestUtils.errorResponse(TylinkResultCode.LOGIN_INVALID_CREDENTIALS);
         } catch (CognitoIdentityProviderException e) {
             log.error("Cognito InitiateAuth failed", e);
-            return RequestUtils.jsonResponse(500, Map.of("message", "failed to authenticate"));
+            return RequestUtils.errorResponse(TylinkResultCode.LOGIN_FAILED);
         }
 
         log.info("Login succeeded");
-        return RequestUtils.jsonResponse(200, toResponseBody(authResponse.authenticationResult()));
+        return RequestUtils.successResponse(200, toResponseBody(authResponse.authenticationResult()));
     }
 
     private static Map<String, String> toResponseBody(AuthenticationResultType result) {

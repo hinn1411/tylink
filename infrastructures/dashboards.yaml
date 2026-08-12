@@ -1,0 +1,341 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Nested stack: CloudWatch dashboards for tylink — Lambda Duration percentiles, the custom EMF
+  metrics (ColdStart, IdempotencyMiss, ShortCodeCollisionRetries), and per-function TylinkResultCode
+  counts. Split out of template.yaml since all three dashboards only read function names and
+  nothing reads back from them — the clean, one-directional case for a nested stack. See
+  docs/technical_decisions/11-emf-metrics.md and docs/technical_decisions/12-result-codes.md.
+
+Parameters:
+  # Not AWS::StackName: inside a nested stack that pseudo-parameter resolves to the nested
+  # stack's own auto-generated name (e.g. tylink-DashboardStack-XYZ), not "tylink" — passed down
+  # explicitly from the root template so DashboardName stays stable.
+  RootStackName:
+    Type: String
+  ShortenUrlFunctionName:
+    Type: String
+  RedirectUrlFunctionName:
+    Type: String
+  ListUrlsFunctionName:
+    Type: String
+  UpdateUrlFunctionName:
+    Type: String
+  DeleteUrlFunctionName:
+    Type: String
+  LoginFunctionName:
+    Type: String
+  ExtractTokenAuthorizerFunctionName:
+    Type: String
+
+Resources:
+  # Duration percentile widgets for every declared Lambda — CloudWatch's built-in Lambda
+  # monitoring graphs only show Average/Maximum by default; percentile statistics (p50/p90/p95/
+  # p99) need an explicit dashboard widget even though Duration itself needs no extra
+  # instrumentation. See docs/plans/02-scaling.md step 2.
+  LambdaDurationDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${RootStackName}-lambda-duration-percentiles"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ShortenUrlFunctionName}", { "stat": "p50", "label": "p50" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ShortenUrlFunctionName}", { "stat": "p90", "label": "p90" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ShortenUrlFunctionName}", { "stat": "p95", "label": "p95" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ShortenUrlFunctionName}", { "stat": "p99", "label": "p99" } ]
+                ],
+                "period": 60,
+                "region": "${AWS::Region}",
+                "title": "ShortenUrlFunction Duration Percentiles",
+                "view": "timeSeries"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${RedirectUrlFunctionName}", { "stat": "p50", "label": "p50" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${RedirectUrlFunctionName}", { "stat": "p90", "label": "p90" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${RedirectUrlFunctionName}", { "stat": "p95", "label": "p95" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${RedirectUrlFunctionName}", { "stat": "p99", "label": "p99" } ]
+                ],
+                "period": 60,
+                "region": "${AWS::Region}",
+                "title": "RedirectUrlFunction Duration Percentiles",
+                "view": "timeSeries"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ListUrlsFunctionName}", { "stat": "p50", "label": "p50" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ListUrlsFunctionName}", { "stat": "p90", "label": "p90" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ListUrlsFunctionName}", { "stat": "p95", "label": "p95" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ListUrlsFunctionName}", { "stat": "p99", "label": "p99" } ]
+                ],
+                "period": 60,
+                "region": "${AWS::Region}",
+                "title": "ListUrlsFunction Duration Percentiles",
+                "view": "timeSeries"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${UpdateUrlFunctionName}", { "stat": "p50", "label": "p50" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${UpdateUrlFunctionName}", { "stat": "p90", "label": "p90" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${UpdateUrlFunctionName}", { "stat": "p95", "label": "p95" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${UpdateUrlFunctionName}", { "stat": "p99", "label": "p99" } ]
+                ],
+                "period": 60,
+                "region": "${AWS::Region}",
+                "title": "UpdateUrlFunction Duration Percentiles",
+                "view": "timeSeries"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 12, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${DeleteUrlFunctionName}", { "stat": "p50", "label": "p50" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${DeleteUrlFunctionName}", { "stat": "p90", "label": "p90" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${DeleteUrlFunctionName}", { "stat": "p95", "label": "p95" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${DeleteUrlFunctionName}", { "stat": "p99", "label": "p99" } ]
+                ],
+                "period": 60,
+                "region": "${AWS::Region}",
+                "title": "DeleteUrlFunction Duration Percentiles",
+                "view": "timeSeries"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 12, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${LoginFunctionName}", { "stat": "p50", "label": "p50" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${LoginFunctionName}", { "stat": "p90", "label": "p90" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${LoginFunctionName}", { "stat": "p95", "label": "p95" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${LoginFunctionName}", { "stat": "p99", "label": "p99" } ]
+                ],
+                "period": 60,
+                "region": "${AWS::Region}",
+                "title": "LoginFunction Duration Percentiles",
+                "view": "timeSeries"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 18, "width": 24, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ExtractTokenAuthorizerFunctionName}", { "stat": "p50", "label": "p50" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ExtractTokenAuthorizerFunctionName}", { "stat": "p90", "label": "p90" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ExtractTokenAuthorizerFunctionName}", { "stat": "p95", "label": "p95" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ExtractTokenAuthorizerFunctionName}", { "stat": "p99", "label": "p99" } ]
+                ],
+                "period": 60,
+                "region": "${AWS::Region}",
+                "title": "ExtractTokenAuthorizerFunction Duration Percentiles",
+                "view": "timeSeries"
+              }
+            }
+          ]
+        }
+
+  # Dashboard for the custom EMF metrics (tylink namespace). See
+  # docs/technical_decisions/11-emf-metrics.md for what each metric means and why.
+  CustomMetricsDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${RootStackName}-custom-metrics"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0, "y": 0, "width": 24, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "tylink", "ColdStart", "Service", "tylink", "FunctionName", "${ShortenUrlFunctionName}", { "stat": "Sum", "label": "ShortenUrlFunction" } ],
+                  [ "tylink", "ColdStart", "Service", "tylink", "FunctionName", "${RedirectUrlFunctionName}", { "stat": "Sum", "label": "RedirectUrlFunction" } ],
+                  [ "tylink", "ColdStart", "Service", "tylink", "FunctionName", "${ListUrlsFunctionName}", { "stat": "Sum", "label": "ListUrlsFunction" } ],
+                  [ "tylink", "ColdStart", "Service", "tylink", "FunctionName", "${UpdateUrlFunctionName}", { "stat": "Sum", "label": "UpdateUrlFunction" } ],
+                  [ "tylink", "ColdStart", "Service", "tylink", "FunctionName", "${DeleteUrlFunctionName}", { "stat": "Sum", "label": "DeleteUrlFunction" } ],
+                  [ "tylink", "ColdStart", "Service", "tylink", "FunctionName", "${LoginFunctionName}", { "stat": "Sum", "label": "LoginFunction" } ],
+                  [ "tylink", "ColdStart", "Service", "tylink", "FunctionName", "${ExtractTokenAuthorizerFunctionName}", { "stat": "Sum", "label": "ExtractTokenAuthorizerFunction" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "Cold Starts by Function",
+                "view": "timeSeries"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "tylink", "IdempotencyMiss", "Service", "tylink", { "stat": "Sum", "label": "IdempotencyMiss", "id": "m1", "yAxis": "left" } ],
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${ShortenUrlFunctionName}", { "stat": "Sum", "label": "Invocations", "id": "m2", "visible": false } ],
+                  [ { "expression": "100 * (1 - (m1 / m2))", "label": "Hit Rate %", "id": "e1", "yAxis": "right" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "Idempotency Miss Count and Derived Hit Rate",
+                "view": "timeSeries"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "tylink", "ShortCodeCollisionRetries", "Service", "tylink", { "stat": "Sum", "label": "ShortCodeCollisionRetries" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "Short-Code Collision Retries",
+                "view": "timeSeries"
+              }
+            }
+          ]
+        }
+
+  # Result-code counts per function (tylink/RequestResult, "FunctionName"+"ResultCode"
+  # dimensions). One graph per Lambda; each graph is a single SEARCH() expression scoped to
+  # that function's metrics, so a new TylinkResultCode shows up automatically the first time
+  # it's emitted — no dashboard redeploy needed when the enum changes. Legend labels use
+  # CloudWatch Dynamic Labels (${!PROP('Dim.ResultCode')}, escaped so Fn::Sub leaves it for
+  # CloudWatch to resolve, not CloudFormation) to show the bare ResultCode name per series.
+  # Counts only, no derived rate math, no alarms (deferred).
+  ResultCodeDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${RootStackName}-result-codes"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0, "y": 0, "width": 24, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ { "expression": "SEARCH('{tylink,FunctionName,ResultCode} MetricName=\"RequestResult\" FunctionName=\"${ShortenUrlFunctionName}\"', 'Sum', 300)", "id": "e1", "label": "${!PROP('Dim.ResultCode')}" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "ShortenUrlFunction Result Codes",
+                "view": "timeSeries",
+                "stacked": false
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 6, "width": 24, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ { "expression": "SEARCH('{tylink,FunctionName,ResultCode} MetricName=\"RequestResult\" FunctionName=\"${RedirectUrlFunctionName}\"', 'Sum', 300)", "id": "e1", "label": "${!PROP('Dim.ResultCode')}" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "RedirectUrlFunction Result Codes",
+                "view": "timeSeries",
+                "stacked": false
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 12, "width": 24, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ { "expression": "SEARCH('{tylink,FunctionName,ResultCode} MetricName=\"RequestResult\" FunctionName=\"${ListUrlsFunctionName}\"', 'Sum', 300)", "id": "e1", "label": "${!PROP('Dim.ResultCode')}" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "ListUrlsFunction Result Codes",
+                "view": "timeSeries",
+                "stacked": false
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 18, "width": 24, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ { "expression": "SEARCH('{tylink,FunctionName,ResultCode} MetricName=\"RequestResult\" FunctionName=\"${DeleteUrlFunctionName}\"', 'Sum', 300)", "id": "e1", "label": "${!PROP('Dim.ResultCode')}" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "DeleteUrlFunction Result Codes",
+                "view": "timeSeries",
+                "stacked": false
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 24, "width": 24, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ { "expression": "SEARCH('{tylink,FunctionName,ResultCode} MetricName=\"RequestResult\" FunctionName=\"${UpdateUrlFunctionName}\"', 'Sum', 300)", "id": "e1", "label": "${!PROP('Dim.ResultCode')}" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "UpdateUrlFunction Result Codes",
+                "view": "timeSeries",
+                "stacked": false
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 30, "width": 24, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ { "expression": "SEARCH('{tylink,FunctionName,ResultCode} MetricName=\"RequestResult\" FunctionName=\"${LoginFunctionName}\"', 'Sum', 300)", "id": "e1", "label": "${!PROP('Dim.ResultCode')}" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "LoginFunction Result Codes",
+                "view": "timeSeries",
+                "stacked": false
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 36, "width": 24, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ { "expression": "SEARCH('{tylink,FunctionName,ResultCode} MetricName=\"RequestResult\" FunctionName=\"${ExtractTokenAuthorizerFunctionName}\"', 'Sum', 300)", "id": "e1", "label": "${!PROP('Dim.ResultCode')}" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "ExtractTokenAuthorizerFunction Result Codes",
+                "view": "timeSeries",
+                "stacked": false
+              }
+            }
+          ]
+        }
+
+Outputs:
+  LambdaDurationDashboardUrl:
+    Description: "CloudWatch Dashboard - Lambda Duration Percentiles"
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${LambdaDurationDashboard}"
+  CustomMetricsDashboardUrl:
+    Description: "CloudWatch Dashboard - Custom EMF Metrics (ColdStart, IdempotencyMiss, ShortCodeCollisionRetries)"
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${CustomMetricsDashboard}"
+  ResultCodeDashboardUrl:
+    Description: "CloudWatch Dashboard - Result Codes per Function (SUCCESS + TylinkResultCode)"
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${ResultCodeDashboard}"

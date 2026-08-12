@@ -6,7 +6,11 @@ import com.tylink.repository.pagination.UrlPage;
 
 public interface UrlRepository {
 
-    void save(ShortUrl shortUrl) throws UrlRepositoryException;
+    /**
+     * @return true if saved; false if a different item already exists at this shortCode's key
+     * (partition-key collision)
+     */
+    boolean save(ShortUrl shortUrl) throws UrlRepositoryException;
 
     ShortUrl findByShortCode(String shortCode) throws UrlRepositoryException;
 

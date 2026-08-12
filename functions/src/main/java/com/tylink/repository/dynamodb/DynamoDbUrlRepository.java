@@ -38,12 +38,16 @@ public class DynamoDbUrlRepository implements UrlRepository {
     }
 
     @Override
-    public void save(ShortUrl shortUrl) {
+    public boolean save(ShortUrl shortUrl) {
         try {
             dynamoDb.putItem(PutItemRequest.builder()
                     .tableName(tableName)
                     .item(toItem(shortUrl))
+                    .conditionExpression("attribute_not_exists(PK)")
                     .build());
+            return true;
+        } catch (ConditionalCheckFailedException e) {
+            return false;
         } catch (SdkException e) {
             throw new UrlRepositoryException(
                     "Failed to save shortCode=" + shortUrl.shortCode() + " to table " + tableName, e);

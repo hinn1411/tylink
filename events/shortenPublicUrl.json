@@ -27,7 +27,7 @@
     "timeEpoch": 1428582896000,
     "authorizer": {
       "lambda": {
-        "ownerId": ""
+        "sub": ""
       }
     }
   },
