@@ -1,0 +1,210 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Nested stack: one AWS/Lambda Errors alarm per function, routed to a shared SNS email topic.
+  Split out of template.yaml like dashboards.yaml, for the same reason: only reads function
+  names in, only the topic ARN read back out. Supports the N6 MTTD check in
+  docs/plans/02-scaling.md step 3.
+
+Parameters:
+  # Not AWS::StackName: inside a nested stack that resolves to the nested stack's own
+  # auto-generated name (e.g. tylink-AlarmStack-XYZ), not "tylink" — passed down explicitly so
+  # AlarmName/TopicName stay stable.
+  RootStackName:
+    Type: String
+  AlertEmail:
+    Type: String
+    Description: >
+      SNS alarm-topic subscriber. AWS emails a confirmation link on creation (and again if this
+      value changes) — notifications don't deliver until it's clicked.
+  ShortenUrlFunctionName:
+    Type: String
+  RedirectUrlFunctionName:
+    Type: String
+  ListUrlsFunctionName:
+    Type: String
+  UpdateUrlFunctionName:
+    Type: String
+  DeleteUrlFunctionName:
+    Type: String
+  LoginFunctionName:
+    Type: String
+  ExtractTokenAuthorizerFunctionName:
+    Type: String
+
+Resources:
+  # Shared by all 7 alarms below. Kept separate from any future AWS Budgets cost-guardrail
+  # topic (N5) — different concern, don't reuse for billing alerts.
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${RootStackName}-alerts"
+      DisplayName: !Sub "${RootStackName} CloudWatch Alarms"
+
+  # Sits in PendingConfirmation (see AlertEmail param) until the confirmation link is clicked.
+  AlarmTopicEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlarmTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  # --- One AWS/Lambda Errors (Sum) alarm per function ---
+  #
+  # Threshold=1, no averaging window: at this traffic volume any single error is alarm-worthy.
+  # If real traffic makes this too chatty later, raise EvaluationPeriods/DatapointsToAlarm
+  # instead of changing the metric.
+  #
+  # TreatMissingData=notBreaching: Errors has no datapoint during idle 60s windows — without
+  # this the alarm sits in INSUFFICIENT_DATA instead of OK.
+  ShortenUrlFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${RootStackName}-shorten-url-errors"
+      AlarmDescription: !Sub "ShortenUrlFunction (${ShortenUrlFunctionName}) reported 1+ Lambda-level errors in a 1-minute window."
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ShortenUrlFunctionName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      OKActions:
+        - !Ref AlarmTopic
+
+  RedirectUrlFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${RootStackName}-redirect-url-errors"
+      AlarmDescription: !Sub "RedirectUrlFunction (${RedirectUrlFunctionName}) reported 1+ Lambda-level errors in a 1-minute window."
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref RedirectUrlFunctionName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      OKActions:
+        - !Ref AlarmTopic
+
+  ListUrlsFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${RootStackName}-list-urls-errors"
+      AlarmDescription: !Sub "ListUrlsFunction (${ListUrlsFunctionName}) reported 1+ Lambda-level errors in a 1-minute window."
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ListUrlsFunctionName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      OKActions:
+        - !Ref AlarmTopic
+
+  UpdateUrlFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${RootStackName}-update-url-errors"
+      AlarmDescription: !Sub "UpdateUrlFunction (${UpdateUrlFunctionName}) reported 1+ Lambda-level errors in a 1-minute window."
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref UpdateUrlFunctionName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      OKActions:
+        - !Ref AlarmTopic
+
+  DeleteUrlFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${RootStackName}-delete-url-errors"
+      AlarmDescription: !Sub "DeleteUrlFunction (${DeleteUrlFunctionName}) reported 1+ Lambda-level errors in a 1-minute window."
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref DeleteUrlFunctionName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      OKActions:
+        - !Ref AlarmTopic
+
+  LoginFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${RootStackName}-login-errors"
+      AlarmDescription: !Sub "LoginFunction (${LoginFunctionName}) reported 1+ Lambda-level errors in a 1-minute window."
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LoginFunctionName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      OKActions:
+        - !Ref AlarmTopic
+
+  ExtractTokenAuthorizerFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${RootStackName}-extract-token-authorizer-errors"
+      AlarmDescription: !Sub "ExtractTokenAuthorizerFunction (${ExtractTokenAuthorizerFunctionName}) reported 1+ Lambda-level errors in a 1-minute window."
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ExtractTokenAuthorizerFunctionName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      OKActions:
+        - !Ref AlarmTopic
+
+Outputs:
+  AlarmTopicArn:
+    Description: "SNS Topic ARN for alarm notifications — subscribe more endpoints later without redeploying"
+    Value: !Ref AlarmTopic

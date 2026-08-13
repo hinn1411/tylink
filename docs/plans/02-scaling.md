@@ -43,3 +43,5 @@ For each concern: **why it matters** → **theory/pattern** → **AWS implementa
 ## Verification
 
 Phase 2 is done when: all APIs are accessed via the CloudFront URL, a documented before/after report exists (latency percentiles from X-Ray/CloudWatch, cost, what broke and what fixed it) for cold starts, caching, and throttling, and the N6 MTTD experiment above has a measured number against the < 5 min target.
+
+**N6 MTTD result (2026-08-13): 89s — pass.** Failure: `IDEMPOTENCY_TABLE_NAME` on `ShortenUrlFunction` pointed at a nonexistent table. t0 07:26:20 UTC (request sent) → t1 07:27:49 UTC (`tylink-shorten-url-errors` alarm ALARM state + SNS email delivered).
