@@ -30,6 +30,13 @@ Parameters:
       Google OAuth client secret. CF can't resolve an ssm-secure dynamic reference for
       AWS::Cognito::UserPoolIdentityProvider
 
+  AlertEmail:
+    Type: String
+    Description: >
+      Email address to receive CloudWatch Alarm notifications via SNS. Not stored in
+      samconfig.toml (git-tracked) — same reasoning as GoogleClientSecret — pass at deploy time
+      via scripts/deploy.sh's ALERT_EMAIL env var.
+
 Resources:
   UserPool:
     Type: AWS::Cognito::UserPool
@@ -350,6 +357,22 @@ Resources:
         LoginFunctionName: !Ref LoginFunction
         ExtractTokenAuthorizerFunctionName: !Ref ExtractTokenAuthorizerFunction
 
+  # Nested stack for CloudWatch Alarms + SNS email notifications
+  AlarmStack:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: infrastructures/alarms.yaml
+      Parameters:
+        RootStackName: !Ref AWS::StackName
+        AlertEmail: !Ref AlertEmail
+        ShortenUrlFunctionName: !Ref ShortenUrlFunction
+        RedirectUrlFunctionName: !Ref RedirectUrlFunction
+        ListUrlsFunctionName: !Ref ListUrlsFunction
+        UpdateUrlFunctionName: !Ref UpdateUrlFunction
+        DeleteUrlFunctionName: !Ref DeleteUrlFunction
+        LoginFunctionName: !Ref LoginFunction
+        ExtractTokenAuthorizerFunctionName: !Ref ExtractTokenAuthorizerFunction
+
 Outputs:
   HttpApiUrl:
     Description: "Base URL for the tylink HTTP API"
@@ -429,3 +452,6 @@ Outputs:
   CustomMetricsDashboardUrl:
     Description: "CloudWatch Dashboard - Custom EMF Metrics (ColdStart, IdempotencyMiss, ShortCodeCollisionRetries)"
     Value: !GetAtt DashboardStack.Outputs.CustomMetricsDashboardUrl
+  AlarmTopicArn:
+    Description: "SNS Topic ARN for CloudWatch Alarm notifications"
+    Value: !GetAtt AlarmStack.Outputs.AlarmTopicArn
