@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Exercise the same call LoginHandler makes, directly against Cognito.
-# Register a user first with scripts/register-test-user.sh if you don't have one.
+# Register a user first with scripts/auth/register-test-user.sh if you don't have one.
 # Fill in USER_POOL_CLIENT_ID / REGION below, or export them before running. Get the client ID
 # from stack outputs:
 #   sam list stack-outputs --stack-name <stack>

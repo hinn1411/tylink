@@ -35,7 +35,7 @@ Parameters:
     Description: >
       Email address to receive CloudWatch Alarm notifications via SNS. Not stored in
       samconfig.toml (git-tracked) — same reasoning as GoogleClientSecret — pass at deploy time
-      via scripts/deploy.sh's ALERT_EMAIL env var.
+      via scripts/deploy/deploy.sh's ALERT_EMAIL env var.
 
 Resources:
   UserPool:
@@ -146,6 +146,22 @@ Resources:
   HttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
+      AccessLogSettings:
+        DestinationArn: !GetAtt HttpApiAccessLogGroup.Arn
+        # Per-request status + the raw integration error (e.g. Lambda's TooManyRequestsException
+        # message) that never otherwise appears anywhere: a throttled Lambda invocation produces
+        # no function log and no X-Ray segment (the function never runs), so this access log is
+        # the only place that failure mode is visible per-request rather than as an aggregate
+        # CloudWatch metric count.
+        Format: >-
+          {"requestId":"$context.requestId","requestTime":"$context.requestTime",
+          "sourceIp":"$context.identity.sourceIp","httpMethod":"$context.httpMethod",
+          "routeKey":"$context.routeKey","status":"$context.status",
+          "integrationStatus":"$context.integration.status",
+          "integrationErrorMessage":"$context.integrationErrorMessage",
+          "errorMessage":"$context.error.message",
+          "responseLatency":"$context.responseLatency",
+          "integrationLatency":"$context.integration.latency"}
       Auth:
         Authorizers:
           # Allow all traffic, only extract token
@@ -167,13 +183,42 @@ Resources:
             Identity:
               Context:
                 - routeKey
-          # Native authorizer, only accepts valid token. Otherwise, rejects all.
+          # Native authorizer, only accepts valid id token. Otherwise, rejects all.
           NativeJwtAuthorizer:
             JwtConfiguration:
               issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
               audience:
                 - !Ref UserPoolClient
             IdentitySource: "$request.header.Authorization"
+
+  HttpApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/${AWS::StackName}-http-api-access-logs"
+      RetentionInDays: 14
+
+  # API Gateway (REST and HTTP alike) refuses to deliver any access/execution logs until this
+  # account-level CloudWatch Logs role is set — without it, enabling AccessLogSettings above
+  # fails deployment with "CloudWatch Logs role ARN must be set in account settings." This is
+  # an account/region-wide setting (not scoped to this one API), but declaring it here keeps it
+  # under IaC instead of a manual one-time console click.
+  ApiGatewayCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
 
   # SAM does not generate permission for custom authorizer automatically
   ExtractTokenAuthorizerPermission:

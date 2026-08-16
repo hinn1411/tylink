@@ -96,12 +96,12 @@ sam deploy            # subsequent deploys reuse samconfig.toml
 ```
 
 Google login via Cognito needs one parameter `samconfig.toml` can't default (it's git-tracked): the
-Google OAuth client secret. `scripts/deploy.sh` pulls it fresh from SSM on every deploy instead of
+Google OAuth client secret. `scripts/deploy/deploy.sh` pulls it fresh from SSM on every deploy instead of
 storing it anywhere, and passes any extra args straight through to `sam deploy`:
 
 ```bash
-./scripts/deploy.sh
-./scripts/deploy.sh --guided
+./scripts/deploy/deploy.sh
+./scripts/deploy/deploy.sh --guided
 ```
 
 `AWS::Cognito::UserPoolIdentityProvider` isn't on CloudFormation's `ssm-secure` dynamic-reference
