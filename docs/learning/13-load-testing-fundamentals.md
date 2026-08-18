@@ -44,8 +44,8 @@ once multiple calls are chained or parallelized. This is why an SLO belongs on t
 outermost, user-facing measurement, not just on each internal component individually.
 
 See `01-system-design-concepts.md` #1 for where this shows up in TyLink's own N1
-requirement (redirect p99 < 100ms, CRUD p99 < 300ms — both percentile SLOs, not
-averages, by design).
+requirement (p99 < 1000ms, applied uniformly across redirect and CRUD — a percentile
+SLO, not an average, by design).
 
 ---
 

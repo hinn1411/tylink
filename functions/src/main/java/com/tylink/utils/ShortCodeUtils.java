@@ -12,14 +12,14 @@ public final class ShortCodeUtils {
     private static final String BASE62_ALPHABET =
             "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final int SHORT_CODE_LENGTH = 7;
-    private static final SecureRandom RANDOM = new SecureRandom();
     private static final Set<Character> VALID_CHARS = buildValidCharsSet();
 
     private ShortCodeUtils() {
     }
 
     public static String generate() {
-        return RANDOM.ints(SHORT_CODE_LENGTH, 0, BASE62_ALPHABET.length())
+        SecureRandom random = new SecureRandom();
+        return random.ints(SHORT_CODE_LENGTH, 0, BASE62_ALPHABET.length())
                 .mapToObj(BASE62_ALPHABET::charAt)
                 .map(String::valueOf)
                 .collect(Collectors.joining());

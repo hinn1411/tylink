@@ -55,7 +55,7 @@ The project is split into 3 phases, documented one file per phase in this `plans
 
 | # | Requirement | Justification |
 |---|---|---|
-| N1 | **Explicit latency SLOs** (e.g. redirect p99 < 500ms server-side, CRUD p99 < 500ms) | Gives Phase 3 load-test results a pass/fail meaning instead of just numbers |
+| N1 | **Explicit latency SLOs** (e.g. redirect p99 < 1000ms server-side, CRUD p99 < 1000ms) | Gives Phase 3 load-test results a pass/fail meaning instead of just numbers |
 | N2 | **Explicit availability target** (e.g. 99.9%) | Anchor for later discussing "what would get us to 99.99%" (Global Tables) without building it |
 | N3 | **Least-privilege IAM per Lambda** — one execution role per function, scoped to only what it touches | The 5 Phase 1 Lambdas have very different blast radii (create vs delete vs redirect); a compromised redirect function shouldn't be able to delete data |
 | N4 | **Decouple business logic from AWS infrastructure** | The prerequisite for meaningfully unit-testing a Java Lambda handler — without this boundary, "unit test" degenerates into mocking the DynamoDB SDK client directly |

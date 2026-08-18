@@ -7,7 +7,10 @@ import com.tylink.repository.UpdateOutcome;
 import com.tylink.repository.UrlRepository;
 import com.tylink.repository.UrlRepositoryException;
 import com.tylink.repository.pagination.UrlPage;
+import com.tylink.utils.SnapStartWarmup;
 import com.tylink.utils.TimestampUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -29,12 +32,30 @@ import java.util.Optional;
 
 public class DynamoDbUrlRepository implements UrlRepository {
 
+    private static final Logger log = LogManager.getLogger(DynamoDbUrlRepository.class);
+
     private final DynamoDbClient dynamoDb;
     private final String tableName;
 
     public DynamoDbUrlRepository(DynamoDbClient dynamoDb, String tableName) {
         this.dynamoDb = dynamoDb;
         this.tableName = tableName;
+        SnapStartWarmup.registerAfterRestore(this::warmUp);
+    }
+
+    // A missing key returns an empty response, not an exception — this only catches genuine
+    // failures (throttling, network issues), which must not fail the restore.
+    private void warmUp() {
+        try {
+            dynamoDb.getItem(GetItemRequest.builder()
+                    .tableName(tableName)
+                    .key(Map.of(
+                            ShortUrlAttributes.PK, AttributeValue.fromS(ShortUrlAttributes.URL_KEY_PREFIX + "SNAPSTARTWARMUP"),
+                            ShortUrlAttributes.SK, AttributeValue.fromS(ShortUrlAttributes.SK_METADATA)))
+                    .build());
+        } catch (SdkException e) {
+            log.warn("SnapStart warm-up GetItem failed, continuing anyway", e);
+        }
     }
 
     @Override

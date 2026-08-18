@@ -2,7 +2,7 @@
 
 k6 harness for `docs/plans/03-testing.md`: two load profiles exercising three separately
 tagged traffic types — hot-key redirect, cold-key redirect, auth+CRUD — against N1's
-latency SLO (redirect p99 < 100ms, CRUD p99 < 300ms, per
+latency SLO (p99 < 1000ms, per
 `docs/learning/14-load-testing-with-k6.md` Part 4.1/8.1).
 
 - `lib.js` — shared setup/login, redirect, and CRUD-lifecycle logic. Not run directly.

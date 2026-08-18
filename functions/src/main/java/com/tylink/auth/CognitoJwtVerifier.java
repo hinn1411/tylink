@@ -8,6 +8,7 @@ import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
+import com.tylink.utils.SnapStartWarmup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,6 +36,15 @@ public class CognitoJwtVerifier {
                 .cached(10, 24, TimeUnit.HOURS)
                 .rateLimited(10, 1, TimeUnit.MINUTES)
                 .build();
+        SnapStartWarmup.registerAfterRestore(this::warmUp);
+    }
+
+    private void warmUp() {
+        try {
+            jwkProvider.get("snapstart-warmup");
+        } catch (JwkException expected) {
+            log.info("Expect warm up request fails!");
+        }
     }
 
     /**

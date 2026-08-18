@@ -36,7 +36,6 @@ For each concern: **why it matters** → **theory/pattern** → **AWS implementa
 | **Observability at scale** | Without distributed tracing you can't tell whether a slow p99 is Lambda init, the DynamoDB call, or API Gateway overhead | Distributed tracing / structured observability | X-Ray active tracing (service map with per-node p50/p90, highlights cold-start penalties); Powertools structured logs with correlation IDs + CloudWatch EMF custom metrics; **Lambda Insights** for CPU/memory |
 | **Security at scale** | An unprotected public API/login page is a direct target for credential stuffing and scraping once reachable | Perimeter rate limiting | HTTP API's built-in route/stage throttling covers a free, IP/account-wide baseline; it can't distinguish *which* client is abusing you, though — **AWS WAF** rate-based rules (per-IP buckets, optional, real cost) is the production-grade next step for that |
 | **Abuse visibility (access logging)** | Throttling/WAF rules need per-request evidence (source IP, route, status, latency) to tune correctly and to prove abuse actually happened — without it, tuning is guesswork, especially on `/v1/auth/login`, the only fully-unauthenticated route | Structured audit logging | HTTP API `AccessLogSettings` on the stage (JSON format) to a dedicated CloudWatch Logs group — not enabled by default, no fee for the feature itself, only CloudWatch Logs ingestion/storage. **Must set an explicit retention period** (e.g. 14–30 days) on that log group at creation — CloudWatch Logs defaults to indefinite retention, which accumulates storage cost silently if left unset |
-| **Multi-region / DR** (concept only, not built) | Single-region deployment has a real, if accepted, region-outage risk | Multi-active replication | **DynamoDB Global Tables** — worth knowing exists; out of scope here since it drags in Route 53 latency routing and multi-region API Gateway/Cognito/Lambda considerations |
 
 ---
 
@@ -45,3 +44,5 @@ For each concern: **why it matters** → **theory/pattern** → **AWS implementa
 Phase 2 is done when: all APIs are accessed via the CloudFront URL, a documented before/after report exists (latency percentiles from X-Ray/CloudWatch, cost, what broke and what fixed it) for cold starts, caching, and throttling, and the N6 MTTD experiment above has a measured number against the < 5 min target.
 
 **N6 MTTD result (2026-08-13): 89s — pass.** Failure: `IDEMPOTENCY_TABLE_NAME` on `ShortenUrlFunction` pointed at a nonexistent table. t0 07:26:20 UTC (request sent) → t1 07:27:49 UTC (`tylink-shorten-url-errors` alarm ALARM state + SNS email delivered).
+
+**Before/after report: see `../reports/scaling-load-test-results.md`** (in progress — filled in per technique as step 5 above is executed).

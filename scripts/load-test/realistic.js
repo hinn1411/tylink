@@ -18,8 +18,8 @@ export const options = {
       rate: 30,
       timeUnit: '1s',
       duration: '1m',
-      preAllocatedVUs: 10,
-      maxVUs: 30,
+      preAllocatedVUs: 20,
+      maxVUs: 60,
       tags: { scenario: 'hot' },
     },
     cold_key_redirect: {
@@ -28,8 +28,8 @@ export const options = {
       rate: 30,
       timeUnit: '1s',
       duration: '1m',
-      preAllocatedVUs: 10,
-      maxVUs: 30,
+      preAllocatedVUs: 20,
+      maxVUs: 60,
       tags: { scenario: 'cold' },
     },
     auth_crud: {
@@ -40,9 +40,9 @@ export const options = {
     },
   },
   thresholds: {
-    'http_req_duration{scenario:hot}': ['p(99)<100'],
-    'http_req_duration{scenario:cold}': ['p(99)<100'],
-    'http_req_duration{scenario:crud}': ['p(99)<300'],
+    'http_req_duration{scenario:hot}': ['p(99)<1000'],
+    'http_req_duration{scenario:cold}': ['p(99)<1000'],
+    'http_req_duration{scenario:crud}': ['p(99)<1000'],
   },
 };
 

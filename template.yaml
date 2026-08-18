@@ -21,6 +21,9 @@ Globals:
         POWERTOOLS_LOG_LEVEL: INFO
         POWERTOOLS_SERVICE_NAME: tylink
         POWERTOOLS_METRICS_NAMESPACE: tylink
+    AutoPublishAlias: live
+    SnapStart:
+      ApplyOn: PublishedVersions
 
 Parameters:
   GoogleClientSecret:
@@ -166,7 +169,7 @@ Resources:
         Authorizers:
           # Allow all traffic, only extract token
           ExtractTokenAuthorizer:
-            FunctionArn: !GetAtt ExtractTokenAuthorizerFunction.Arn
+            FunctionArn: !Ref ExtractTokenAuthorizerFunction.Alias
             AuthorizerPayloadFormatVersion: "2.0"
             EnableSimpleResponses: true
             # Identity source is $context.routeKey (API Gateway-synthesized, never client-
@@ -220,12 +223,16 @@ Resources:
     Properties:
       CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
 
-  # SAM does not generate permission for custom authorizer automatically
+  # SAM does not generate permission for custom authorizer automatically. Must target the
+  # `live` alias, not the base function — Lambda's resource policy is qualifier-specific,
+  # so a permission scoped to the unqualified function does NOT cover invoking a specific
+  # alias (confirmed live: API Gateway returned 500s for every request through this
+  # authorizer until this was pointed at .Alias, matching FunctionArn below).
   ExtractTokenAuthorizerPermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !Ref ExtractTokenAuthorizerFunction
+      FunctionName: !Ref ExtractTokenAuthorizerFunction.Alias
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/authorizers/*"
 

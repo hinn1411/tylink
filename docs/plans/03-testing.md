@@ -42,3 +42,5 @@ end of this phase.
 ## Verification
 
 Phase 3 is done when: a load-test report exists with k6 output + correlated CloudWatch/X-Ray screenshots, stating a measured capacity ("X RPS at p99 < Yms") and the actual bottleneck found.
+
+**Report: see `../reports/scaling-load-test-results.md`** (in progress — the capacity claim and bottleneck analysis are filled in once the capstone stress run completes).

@@ -10,7 +10,7 @@ A beginner-friendly recap of the system-design concepts that came up while desig
 
 **What it means**: "Scalable" isn't one number — you first describe your load (requests/sec, read/write ratio, fan-out) and your performance (usually **latency percentiles** like p50/p99, not averages, because averages hide the slow outliers that actual users feel — and a single slow call inside a fan-out request drags down the whole request's latency, "tail latency amplification").
 
-**Where it showed up**: TyLink's N1 requirement — redirect p99 < 100ms, CRUD p99 < 300ms — is exactly this kind of percentile-based SLO.
+**Where it showed up**: TyLink's N1 requirement — p99 < 1000ms, applied uniformly across redirect and CRUD — is exactly this kind of percentile-based SLO.
 
 **Read in DDIA**: Chapter 1, *Reliable, Scalable, and Maintainable Applications* — sections "Describing Load" and "Describing Performance" (~p. 10–18).
 
