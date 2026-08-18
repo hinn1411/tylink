@@ -102,7 +102,9 @@ Full investigation at `docs/technical_decisions/14-snapstart-restore-latency.md`
 - **Root cause**: a restore invocation on Redirect or the Authorizer costs
 ~2.2–2.9s end-to-end (`Restore Duration` + `Duration`), dominated by platform/JVM-level restore cost.
 
-**Evidence**: ./assets/cold-start-2026-08-17.png
+**Evidence**:
+
+![CloudWatch/X-Ray cold-start evidence for SnapStart restore invocations, 2026-08-17](./assets/cold-start-2026-08-17.png)
 
 **Verdict**: JVM is a significant overhead. SnapStart & Connection-priming roughly halves p99 but it does not meet the SLO
 <details>

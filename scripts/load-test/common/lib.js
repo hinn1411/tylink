@@ -5,7 +5,7 @@ import { SharedArray } from 'k6/data';
 export const BASE_URL = (__ENV.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
 
 export const coldCodes = new SharedArray('ShortCodes', () =>
-  JSON.parse(open('./short-codes.json')));
+  JSON.parse(open('../data/short-codes.json')));
 
 export const hotCodes = coldCodes.slice(0, 3);
 

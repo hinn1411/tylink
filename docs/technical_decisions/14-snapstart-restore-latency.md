@@ -2,81 +2,72 @@
 
 ## Context
 
-SnapStart (`ApplyOn: PublishedVersions` + `AutoPublishAlias`) was applied to all seven Lambda
-functions to remove cold-start latency. Load testing (`docs/reports/scaling-load-test-results.md`
-§1) showed SnapStart *was* restoring rather than cold-starting, but p99 still failed the 1000ms
-SLO by a wide margin — CloudWatch Logs Insights showed restore invocations (~1.8% of traffic
-at the time) averaging 4124ms `Duration` on Redirect and 1144ms on the Authorizer, versus
-20-40ms warm. The question was how to close that gap.
+AWS Lambda SnapStart removes most cold-start latency by freezing a snapshot of an
+already-initialized execution environment and restoring new instances from that snapshot,
+instead of re-running startup from scratch each time. SnapStart (`ApplyOn: PublishedVersions`
++ `AutoPublishAlias`) was applied to all seven Lambda functions in this project. Load testing
+(`docs/reports/scaling-load-test-results.md` §1) showed SnapStart *was* restoring rather than
+cold-starting, but p99 still failed the 1000ms SLO by a wide margin — CloudWatch Logs Insights
+showed restore invocations (~1.8% of traffic at the time) averaging 4124ms `Duration` on the
+redirect handler and 1144ms on the authorizer, versus 20-40ms warm. The question was how to
+close that gap.
 
 ## What we tried
 
-1. **CRaC `afterRestore` connection-priming, SDK-call-only (kept).** A shared
-   `SnapStartWarmup.registerAfterRestore(Runnable)` utility runs one real network call per
-   client during the restore's `afterRestore` hook — `DynamoDbClient.getItem()` for a
-   nonexistent key, `JwkProvider.get()` for a bogus key ID, `CognitoIdentityProviderClient
-   .initiateAuth()` with bogus credentials — forcing TCP/TLS setup to happen during restore
-   instead of on the first real request. Confirmed effective via X-Ray subsegment timing: a
+1. **Connection-priming, SDK-call-only (kept).** SnapStart's snapshot can't preserve open
+   network connections — sockets don't survive being frozen and thawed — so the first real
+   request after a restore used to pay full price to reopen them. CRaC (Coordinated Restore at
+   Checkpoint) lets code register a hook that runs immediately after a snapshot restores, before
+   any real request arrives. A shared `SnapStartWarmup` utility uses this hook to make one real,
+   throwaway network call per AWS client right there — a DynamoDB read, a JWKS lookup, a Cognito
+   auth attempt, each against a bogus target that's expected to fail — so the TCP/TLS connection
+   is already open by the time a real request shows up. Confirmed effective via X-Ray timing: a
    restore invocation's actual DynamoDB call dropped to 26-43ms, matching the warm baseline,
-   down from ~4100ms unwarmed. This directly cut p99 roughly in half (hot: 9.6s → 5.75s; see
-   the report's Before → After table) and is the only priming technique that shipped.
+   down from ~4100ms unwarmed. This cut p99 roughly in half (hot: 9.6s → 5.75s; see the report's
+   Before → After table) and is the only priming technique that shipped.
 
-   Gotcha worth knowing: CRaC's `Context` holds only a `WeakReference` to registered
-   `Resource`s — a `Resource` with no other strong reference gets garbage-collected before
-   restore ever happens, silently disabling the hook. `SnapStartWarmup` keeps a static
-   `CopyOnWriteArrayList` of every registered `Resource` specifically to prevent this.
+   Gotcha worth knowing: CRaC only keeps a *weak* reference to a registered hook — with nothing
+   else holding onto it, the hook can be garbage-collected before it ever fires, silently
+   disabling it. `SnapStartWarmup` keeps its own list of every registered hook to prevent that.
 
-2. **Full request-path priming (rejected, rolled back).** Hypothesis: connection-priming
-   alone doesn't warm JIT compilation or class-loading for the rest of the request path, so
-   the first real invocation still pays that cost. Changed `RedirectUrlHandler` and
-   `ExtractTokenAuthorizerHandler` to call their own `handleRequest()` with a synthetic event
-   during `afterRestore`, instead of a bare SDK call.
+2. **Full request-path priming (rejected, rolled back).** Hypothesis: connection-priming alone
+   doesn't warm up the rest of the request-handling code (JSON parsing, framework overhead,
+   business logic), so the first real invocation still pays a "first time running this code"
+   tax. Instead of one bare SDK call, the redirect and authorizer handlers ran their *entire*
+   request-handling logic against a fake request during the restore hook.
 
-   Result: no meaningful improvement, and one variant (a synthetic event enriched to mirror a
-   real API Gateway payload's full shape, to warm Jackson's serializers for
-   `RequestContext`/`Http`/`Authorizer`) made Redirect's restore-invocation `Duration`
-   measurably *worse* (1466ms → 1558ms avg). The mechanism: `Restore Duration` and `Duration`
-   are both real wall-clock time the caller waits on. Making the warmup do more work shifted
-   cost from `Duration` into `Restore Duration` — the total per-function cost stayed roughly
-   flat (~3.1-3.5s) across every full-path variant tried.
+   Result: no meaningful improvement, and one variant made things measurably worse. The
+   mechanism: SnapStart reports two timing phases — the restore itself, and the handler
+   execution that follows — and both are real time the caller waits on. Making the priming hook
+   do more work just shifted cost from one phase into the other; the combined total per function
+   stayed flat no matter how much extra work the hook did.
 
-3. **Isolating Powertools' `@Logging`/`@FlushMetrics` aspects (informative, rolled back).**
-   Manual X-Ray subsegments bracketing the handler body showed the missing latency sat almost
-   entirely *outside* traced business logic — in the gap immediately before the method body
-   starts and after it returns, which is where Powertools' AspectJ-woven advice
-   (`LambdaLoggingAspect` wrapping `LambdaMetricsAspect` wrapping the method) runs. Temporarily
-   removing both annotations confirmed this as a real, non-trivial contributor: Redirect's
-   pre-body gap dropped from ~640ms to ~370ms, and the Authorizer's dropped from ~1050ms to
-   ~370-400ms (with its overall restore-invocation total falling from ~2.1-3.0s to ~2.2-2.4s
-   for the typical case).
+3. **Removing the logging/metrics framework's overhead (informative, rolled back).** Manual
+   timing around the handler body showed the unexplained latency sat almost entirely *outside*
+   the actual business logic — inside the Powertools framework code that wraps every handler
+   call for structured logging and metrics. Temporarily removing that instrumentation confirmed
+   it as a real, non-trivial contributor (several hundred ms per restore).
 
-   Not adopted, because a real ~500-580ms gap remained even with **zero** annotations and
-   **zero** application code running beyond a single traced SDK call — most likely JVM/GC
-   activity intrinsic to resuming from a Firecracker snapshot, not anything reducible at the
-   application layer. Permanently losing structured logging and custom metrics on two
-   production functions wasn't worth a partial, non-SLO-closing win.
+   Not adopted: a real ~500-580ms gap remained even with that instrumentation removed entirely
+   and no other application code running — most likely JVM/garbage-collection activity that's
+   intrinsic to resuming from a snapshot, not something fixable in application code.
+   Permanently losing structured logging and metrics wasn't worth a partial win that still
+   didn't close the SLO gap.
 
-## Root cause (confirmed, not application code)
+## Root cause
 
-Across every variant, `Restore Duration` + `Duration` combined settled around **2.2-2.9
-seconds per function** on a restore invocation, regardless of how much or how little
-application code ran during the hook. Since the Authorizer runs before every backend function,
-a request where both restore in the same scale-up burst (common — they scale together) pays
-both costs: ~4.3-5.3s combined, which matches the load test's observed p99 (5.09-5.75s hot/cold)
-almost exactly. This is a platform/JVM-level cost of the restore itself, not something any of
-the priming strategies above could reach.
+No matter how much (or how little) priming ran, a restore invocation still cost **~2.2-2.9
+seconds per function** — a platform/JVM cost of the restore itself, not application code. The
+authorizer runs before every request and restores in the same bursts as the backend functions,
+so a single request can pay both costs at once (~4.3-5.3s), which is why p99 stays high even
+after priming.
 
 ## Decision
 
-Keep technique 1 (SDK-call connection-priming) only. Revert techniques 2 and 3 in full:
-`RedirectUrlHandler` and `ExtractTokenAuthorizerHandler` are back to their pre-investigation
-form (no handler-level `warmUp()`, `@Logging`/`@FlushMetrics` restored, no manual X-Ray
-subsegments); `CognitoJwtVerifier` has its own narrow `warmUp()` back.
+Keep connection-priming (technique 1) only; techniques 2 and 3 are fully reverted.
 
-SnapStart + connection-priming is a genuine, real win — it eliminates the worst-case
-unwarmed-connection tax (~4s → tens of ms) — but does **not**, by itself, meet a sub-1000ms p99
-SLO under this project's burst load pattern. Closing that gap needs a different lever entirely,
-not more application-code tuning: reducing how often a restore happens at all via provisioned
-concurrency. That means *replacing* SnapStart on these functions, not combining with it — AWS
-does not support SnapStart and provisioned concurrency together on the same version/alias. See
-`docs/reports/scaling-load-test-results.md`'s "Beyond This Project" section.
+It's a real, worthwhile win — it removes the worst-case unwarmed-connection tax (~4s → tens of
+ms) — but can't close the SLO gap alone. That needs fewer restores in the first place (e.g.
+provisioned concurrency, which *replaces* SnapStart rather than combining with it — AWS doesn't
+support both on the same function), not more application-code tuning. See the report's "Beyond
+This Project" section.

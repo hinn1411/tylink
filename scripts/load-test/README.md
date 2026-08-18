@@ -5,25 +5,25 @@ tagged traffic types — hot-key redirect, cold-key redirect, auth+CRUD — agai
 latency SLO (p99 < 1000ms, per
 `docs/learning/14-load-testing-with-k6.md` Part 4.1/8.1).
 
-- `lib.js` — shared setup/login, redirect, and CRUD-lifecycle logic. Not run directly.
+- `common/lib.js` — shared setup/login, redirect, and CRUD-lifecycle logic. Not run directly.
 - `realistic.js` — steady declared load, N1 thresholds, no `abortOnFail`. Reports
   pass/fail against the SLO without stopping early.
 - `stress.js` — climbing load with `abortOnFail`, stops the instant the SLO breaks. The
   stage k6 was executing when it aborts is the measured capacity number.
-- `seed-short-codes.sh` — seeds short codes and writes `short-codes.json`, which both
-  profiles load via `SharedArray`.
+- `data/seed-short-codes.sh` — seeds short codes and writes `data/short-codes.json`, which
+  both profiles load via `SharedArray`.
 
 ## Prerequisites
 
 A registered test user (`../auth/register-test-user.sh` if you don't have one) and a
-seeded `short-codes.json`:
+seeded `data/short-codes.json`:
 
 ```bash
-BASE_URL=http://localhost:3000 ./seed-short-codes.sh          # against sam local start-api
-BASE_URL=https://<api-id>.execute-api.<region>.amazonaws.com ./seed-short-codes.sh  # against a deployed stack
+BASE_URL=http://localhost:3000 ./data/seed-short-codes.sh          # against sam local start-api
+BASE_URL=https://<api-id>.execute-api.<region>.amazonaws.com ./data/seed-short-codes.sh  # against a deployed stack
 ```
 
-`short-codes.json` is gitignored — it's tied to whichever `BASE_URL` seeded it and is
+`data/short-codes.json` is gitignored — it's tied to whichever `BASE_URL` seeded it and is
 meaningless against a different environment. Re-seed after switching targets.
 
 ## Running

@@ -4,7 +4,7 @@ import {
   hotRedirect as sharedHotRedirect,
   coldRedirect as sharedColdRedirect,
   crudLifecycle,
-} from './lib.js';
+} from './common/lib.js';
 
 // Stress-to-failure / "find the wall" profile (docs/plans/03-testing.md step 1, k6 doc
 // Part 8.2): no think-time, climbing arrival rate on all three traffic types, N1

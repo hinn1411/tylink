@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Seeds short codes for the load-test scripts (realistic.js/stress.js) by POSTing to
 # POST /v1/urls repeatedly (unauthenticated, PUBLIC), then writes the resulting shortCodes
-# to a JSON array file that k6's SharedArray loads directly (see lib.js).
+# to a JSON array file that k6's SharedArray loads directly (see common/lib.js).
 # Requires: BASE_URL reachable (sam local start-api, or a deployed HttpApiUrl), and jq.
 set -euo pipefail
 

@@ -4,7 +4,7 @@ import {
   hotRedirect as sharedHotRedirect,
   coldRedirect as sharedColdRedirect,
   crudLifecycle,
-} from './lib.js';
+} from './common/lib.js';
 
 // Realistic traffic profile (docs/plans/03-testing.md step 1, k6 doc Part 8.1): steady
 // declared rate for redirects, ramping concurrency for the CRUD flow, N1 thresholds with
