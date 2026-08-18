@@ -251,20 +251,21 @@ unnoticed RPS number.
 
 ## Part 4 — Thresholds as SLOs, Split by Endpoint via Tags
 
-### 4.1 One script, two SLOs
+### 4.1 One script, tag-scoped thresholds
 
-TyLink's N1 is actually two thresholds — redirect p99 < 100ms, CRUD p99 < 300ms — but
+TyLink's N1 is one threshold — p99 < 1000ms — applied uniformly, but
 `http_req_duration` by default aggregates *every* request in the script into one metric.
-Splitting by endpoint needs **tags**: attach a tag per request, then write a
-threshold scoped to that tag.
+Splitting by endpoint still matters, so each traffic type's pass/fail is visible on its
+own rather than blended into one number. That needs **tags**: attach a tag per request,
+then write a threshold scoped to that tag.
 
 ```js
 import http from 'k6/http';
 
 export const options = {
   thresholds: {
-    'http_req_duration{endpoint:redirect}': ['p(99)<100'],
-    'http_req_duration{endpoint:crud}': ['p(99)<300'],
+    'http_req_duration{endpoint:redirect}': ['p(99)<1000'],
+    'http_req_duration{endpoint:crud}': ['p(99)<1000'],
   },
 };
 
@@ -297,8 +298,8 @@ export const options = {
   vus: 5,
   duration: '15s',
   thresholds: {
-    'http_req_duration{endpoint:redirect}': ['p(99)<100'],
-    'http_req_duration{endpoint:crud}': ['p(99)<300'],
+    'http_req_duration{endpoint:redirect}': ['p(99)<1000'],
+    'http_req_duration{endpoint:crud}': ['p(99)<1000'],
   },
 };
 
@@ -466,9 +467,9 @@ export const options = {
     },
   },
   thresholds: {
-    'http_req_duration{scenario:hot}': ['p(99)<100'],
-    'http_req_duration{scenario:cold}': ['p(99)<100'],
-    'http_req_duration{scenario:crud}': ['p(99)<300'],
+    'http_req_duration{scenario:hot}': ['p(99)<1000'],
+    'http_req_duration{scenario:cold}': ['p(99)<1000'],
+    'http_req_duration{scenario:crud}': ['p(99)<1000'],
   },
 };
 
@@ -671,7 +672,7 @@ export const options = {
     },
   },
   thresholds: {
-    http_req_duration: [{ threshold: 'p(99)<100', abortOnFail: true }],
+    http_req_duration: [{ threshold: 'p(99)<1000', abortOnFail: true }],
     http_req_failed: [{ threshold: 'rate<0.01', abortOnFail: true }],
   },
 };

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Builds and starts sam local start-api with env.json applied, so functions whose config
-# comes from a !Ref sam local can't resolve locally (e.g. Cognito User Pool / Client IDs —
-# see LoginFunction/ExtractTokenAuthorizerFunction in env.json) get the real deployed values
-# instead of a broken literal-logical-ID fallback.
+# Builds and starts the API locally, applying env.json so functions get real deployed
+# config values (e.g. Cognito IDs) instead of broken local defaults.
 # Set SKIP_BUILD=1 to skip the build step on repeat runs where only template.yaml changed.
 set -euo pipefail
 

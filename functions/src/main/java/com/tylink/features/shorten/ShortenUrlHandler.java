@@ -15,12 +15,16 @@ import com.tylink.repository.UrlRepositoryException;
 import com.tylink.utils.LongUrlValidator;
 import com.tylink.utils.RequestUtils;
 import com.tylink.utils.ShortCodeUtils;
+import com.tylink.utils.SnapStartWarmup;
 import com.tylink.utils.TracingUtils;
 import com.tylink.utils.TylinkResultCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.utils.StringUtils;
 import software.amazon.lambda.powertools.idempotency.Idempotency;
 import software.amazon.lambda.powertools.idempotency.IdempotencyConfig;
@@ -45,13 +49,17 @@ public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, 
     static final int MAX_SHORT_CODE_ATTEMPTS = 3;
 
     private final UrlRepository urlRepository;
+    private DynamoDbClient idempotencyClient;
+    private String idempotencyTableName;
 
     public ShortenUrlHandler() {
         this(new DynamoDbUrlRepository(createDynamoDbClient(), System.getenv("TABLE_NAME")));
+        idempotencyTableName = System.getenv("IDEMPOTENCY_TABLE_NAME");
+        idempotencyClient = createDynamoDbClient();
         Idempotency.config()
                 .withPersistenceStore(DynamoDBPersistenceStore.builder()
-                        .withTableName(System.getenv("IDEMPOTENCY_TABLE_NAME"))
-                        .withDynamoDbClient(createDynamoDbClient())
+                        .withTableName(idempotencyTableName)
+                        .withDynamoDbClient(idempotencyClient)
                         .build())
                 .withConfig(IdempotencyConfig.builder()
                         .withEventKeyJMESPath("idempotencyKey")
@@ -59,6 +67,7 @@ public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, 
                         .withExpiration(Duration.ofMinutes(5))
                         .build())
                 .configure();
+        SnapStartWarmup.registerAfterRestore(this::warmUp);
     }
 
     ShortenUrlHandler(UrlRepository urlRepository) {
@@ -69,6 +78,19 @@ public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, 
         return DynamoDbClient.builder()
                 .overrideConfiguration(TracingUtils.xrayOverrideConfiguration())
                 .build();
+    }
+
+    // Separate DynamoDbClient from DynamoDbUrlRepository's — this one backs Powertools'
+    // Idempotency persistence store and needs its own SnapStart re-prime.
+    private void warmUp() {
+        try {
+            idempotencyClient.getItem(GetItemRequest.builder()
+                    .tableName(idempotencyTableName)
+                    .key(Map.of("id", AttributeValue.fromS("SNAPSTART_WARMUP")))
+                    .build());
+        } catch (SdkException e) {
+            log.warn("SnapStart warm-up GetItem failed, continuing anyway", e);
+        }
     }
 
     @Logging(logEvent = true)

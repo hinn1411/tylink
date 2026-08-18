@@ -17,10 +17,10 @@ traffic *shape*:
 | **Spike** | Does a *sudden* burst cause different failures than a slow ramp? (e.g. connection-pool exhaustion, cold-start pile-ups) | Sharp jump, hold briefly, drop |
 | **Soak** | Does anything degrade only over long duration (memory leak, connection exhaustion, a slow resource leak)? | Flat, but long (hours) |
 
-Using the wrong shape breaks the answer: a stress test run with a load test's flat
-shape never climbs past the point where the system was already fine, so it never
-finds the ceiling; a load test run with a stress test's aggressive ramp gets
-contaminated by transient ramp-up effects that wouldn't occur at steady state.
+Using the wrong shape breaks the answer: a stress test with a flat shape never climbs
+past the point where the system was already fine, so it never finds the ceiling; a load
+test with an aggressive ramp gets contaminated by transient ramp-up effects that
+wouldn't occur at steady state.
 
 TyLink's plan needs exactly two of these — load ("realistic" profile, checked against
 the latency SLO) and stress ("find the wall"). Spike and soak are real tests, just not
@@ -36,16 +36,14 @@ experience. **Percentiles** (p50, p90, p99) describe the *distribution's tail*, 
 the part that matters for an SLO — "p99 < 100ms" means 99% of requests were under
 100ms, a claim an average can't make.
 
-**Tail latency amplification**: if a single
-user-facing request fans out to several backend calls, the *chance that at least one of
-them lands in the slow tail* rises with the fan-out count — a system where each
-individual call is "p99 < 100ms" can still have a user-facing p99 far worse than 100ms
-once multiple calls are chained or parallelized. This is why an SLO belongs on the
-outermost, user-facing measurement, not just on each internal component individually.
+**Tail latency amplification**: if a single user-facing request fans out to several
+backend calls, the chance that at least one lands in the slow tail rises with the
+fan-out count — a system where each call is "p99 < 100ms" can still have a
+user-facing p99 far worse than that. This is why an SLO belongs on the outermost,
+user-facing measurement, not each internal component.
 
 See `01-system-design-concepts.md` #1 for where this shows up in TyLink's own N1
-requirement (redirect p99 < 100ms, CRUD p99 < 300ms — both percentile SLOs, not
-averages, by design).
+requirement (p99 < 1000ms, applied uniformly across redirect and CRUD).
 
 ---
 
@@ -54,25 +52,20 @@ averages, by design).
 This is the formal concept behind "concurrent users ≠ requests per second":
 
 - **Closed-loop**: a fixed number of simulated users, each looping — send a request,
-  *wait for the response*, then send the next. The request rate this produces is an
-  **emergent result** of how fast the system responds: a faster system makes the same
-  user count generate more requests/sec; a slower system makes it generate fewer. The
-  user count is the input; the throughput is an output you can only observe after the
-  fact — it describes "how fast N users could push it today," not "what happens at a
-  declared, fixed rate."
+  *wait for the response*, then send the next. The request rate is an **emergent
+  result** of system speed, not an input: user count is what you set, throughput is
+  what you observe afterward — it describes "how fast N users could push it today,"
+  not "what happens at a declared, fixed rate."
 - **Open-loop**: requests are generated at a fixed rate, independent of how long
   previous requests take to respond. If the system slows down, requests still arrive at
   the declared rate — they queue up instead of the generator waiting. The rate is the
   **input**; queueing/backlog is what shows the system falling behind.
 
-Real-world traffic is almost always closer to open-loop: a viral link doesn't slow down
-its own arrival rate just because your server got slower — new visitors keep clicking
-at whatever rate the outside world is clicking, whether or not your system can keep up.
-A closed-loop test structurally cannot reproduce that: as the system slows, a
-closed-loop generator's *offered load drops too*, silently making the system look
-better than it would under real, rate-independent demand — which is why a defensible
-"handles X requests/sec" capacity claim needs an open-loop (or open-loop-emulating)
-load generator.
+Real-world traffic is almost always open-loop: a viral link's arrival rate doesn't slow
+down just because your server did. A closed-loop test can't reproduce that — as the
+system slows, its offered load drops too, silently making the system look better than
+it would under real demand. A defensible "handles X requests/sec" claim needs an
+open-loop (or open-loop-emulating) generator.
 
 ---
 
@@ -96,34 +89,28 @@ generator can only keep 10 concurrent requests in flight, it *cannot* sustain 10
 req/sec no matter how it's configured — it'll top out around 50 req/sec instead
 (`10 / 0.2`).
 
-This is the math behind giving an open-loop/arrival-rate test generous headroom for
-concurrent in-flight requests: if latency rises during the test (exactly what a stress
-test is trying to provoke), the concurrency needed to sustain the same declared rate
-rises too — a generator without that headroom becomes the bottleneck itself, and the
-test silently measures the generator's limit instead of the system's.
+This is why an open-loop test needs generous concurrency headroom: if latency rises
+during the test — exactly what a stress test provokes — the concurrency needed to
+sustain the same rate rises too. Without that headroom, the generator itself becomes
+the bottleneck, and the test measures its limit instead of the system's.
 
 ---
 
 ## 5. Coordinated omission — the hidden bias in closed-loop measurement
 
-A subtler consequence of §3's closed-loop model: it doesn't just misrepresent
-*throughput* under slowdown, it systematically **under-reports tail latency** too.
+A subtler consequence of §3's closed-loop model: it also **under-reports tail
+latency**. If the system stalls for 2 seconds, a closed-loop VU — blocked waiting on
+its one in-flight request — issues exactly one slow request during that stall. An
+open-loop model (or real users) would have kept arriving throughout, producing many
+requests that all felt close to the full delay. The closed-loop sample of "slow
+requests" is tiny next to what actually would have queued up — the measurement omits
+most of the evidence of the event you most wanted to catch.
 
-Picture a closed-loop VU: it sends a request, waits, sends the next. Now suppose the
-system stalls for 2 seconds. During that stall, a closed-loop VU issues exactly *one*
-slow request (the one it's waiting on) — it can't issue more, because it's blocked
-waiting for that response before sending the next one. Meanwhile, an open-loop model
-(or real users) would have kept arriving throughout that whole 2-second stall,
-producing many requests that all experienced something close to that full delay. The
-closed-loop test's sample of "slow requests" during the stall is tiny compared to what
-actually would have queued up in reality — the measurement **omits** most of the
-evidence of exactly the event you most wanted to measure. Hence "coordinated omission":
-the measurement process is coordinated (paused) right along with the system's own
-slowdown, hiding it. This is the deep reason an arrival-rate-based test's percentile
-numbers are trustworthy for a capacity claim in a way a closed-loop test's aren't — not
-just "the RPS number is more honest" (§3), but "the *latency distribution itself* is
-measured without a built-in blind spot during exactly the failure mode you're trying to
-find."
+Hence "coordinated omission": the measurement pauses right along with the system's own
+slowdown. It's why an arrival-rate test's percentiles are trustworthy for a capacity
+claim in a way closed-loop's aren't — not just a more honest RPS number (§3), but a
+latency distribution measured without a blind spot during the exact failure mode being
+tested.
 
 ---
 
@@ -134,9 +121,8 @@ produces either noisy failures or an untrustworthy pass/fail signal:
 
 - **Per-request checks** — "was this individual response correct?" (right status code,
   right body shape, right header). A single failed check is a debugging signal, not a
-  verdict on the whole test — a load test that aborts on the first single failed
-  request is unusable, since some transient failures are expected background noise even
-  in a healthy system.
+  verdict — a test that aborts on the first failure is unusable, since some transient
+  failures are expected background noise even in a healthy system.
 - **Whole-run thresholds** — "did the *test as a whole* meet its bar?" (e.g. 99th
   percentile latency under some number, error rate under some fraction). This is the
   actual go/no-go signal a load test exists to produce, and the thing a CI pipeline or
@@ -159,18 +145,16 @@ goals, not as variations of the same script with different numbers plugged in:
   slack — this test answers "does the system meet its promise today, at expected
   load," nothing more aggressive.
 - **Stress-to-failure**: deliberately *not* realistic — no think-time (don't waste test
-  time simulating pauses), climbing load in
-  stages until something gives. Its purpose is finding the **capacity** number: the
-  point where latency stops being flat and starts climbing as load increases (the
-  "knee" in a latency-vs-load curve), or where the error rate crosses an unacceptable
-  threshold. A stress test that never finds this knee within its climb range hasn't
-  actually tested anything — it just confirmed the system handles less than its
-  configured ceiling, which a load test already answered more cheaply.
+  time simulating pauses), climbing load in stages until something gives. Its purpose
+  is finding the **capacity** number: the point where latency stops being flat and
+  starts climbing as load increases (the "knee" in a latency-vs-load curve), or where
+  the error rate crosses an unacceptable threshold. A stress test that never finds this
+  knee hasn't tested anything — it just confirmed the system handles less than its
+  ceiling, which a load test already answers more cheaply.
 
-Stopping a stress test **the moment** its SLO threshold is first breached (rather than
-running the full planned climb regardless) matters for a subtle reason: everything
-after that point just re-confirms the system is broken, at increasing cost/risk, without
-adding new information — the useful signal is the *transition point* itself.
+Stop a stress test **the moment** its threshold is first breached — everything after
+that just re-confirms the system is broken, at increasing cost/risk, without new
+information. The useful signal is the *transition point* itself.
 
 ---
 

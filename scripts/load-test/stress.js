@@ -4,13 +4,10 @@ import {
   hotRedirect as sharedHotRedirect,
   coldRedirect as sharedColdRedirect,
   crudLifecycle,
-} from './lib.js';
+} from './common/lib.js';
 
-// Stress-to-failure / "find the wall" profile (docs/plans/03-testing.md step 1, k6 doc
-// Part 8.2): no think-time, climbing arrival rate on all three traffic types, N1
-// thresholds with abortOnFail so the run stops the instant the SLO breaks instead of
-// burning the full climb past the point that already answered the question. Read the
-// measured capacity off which stage was executing when k6 aborts.
+// Stress-to-failure profile (docs/plans/03-testing.md step 1): climbs load until the SLO
+// breaks, then stops — the stage it was on when it aborts is the measured capacity.
 export const options = {
   scenarios: {
     hot_key_redirect: {

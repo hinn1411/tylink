@@ -10,10 +10,9 @@
 functions/target/
 functions/dependency-reduced-pom.xml
 
-## Private docs
 
-# Local dev config (sam local --env-vars overrides, machine/stack-specific)
+# Local dev config (sam local --env-vars overrides)
 env.json
 
-# Load-test seed data (tied to whichever BASE_URL seeded it)
-scripts/load-test/short-codes.json
+# Load-test seed data
+scripts/load-test/data/short-codes.json

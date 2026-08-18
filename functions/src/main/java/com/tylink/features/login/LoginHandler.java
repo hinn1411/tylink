@@ -6,6 +6,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 import com.tylink.features.login.models.LoginRequest;
 import com.tylink.utils.RequestUtils;
+import com.tylink.utils.SnapStartWarmup;
 import com.tylink.utils.TracingUtils;
 import com.tylink.utils.TylinkResultCode;
 import org.apache.logging.log4j.LogManager;
@@ -38,6 +39,7 @@ public class LoginHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGa
                         .overrideConfiguration(TracingUtils.xrayOverrideConfiguration())
                         .build(),
                 System.getenv("USER_POOL_CLIENT_ID"));
+        SnapStartWarmup.registerAfterRestore(this::warmUp);
     }
 
     LoginHandler(CognitoIdentityProviderClient cognitoClient, String clientId) {
@@ -45,8 +47,19 @@ public class LoginHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGa
         this.clientId = clientId;
     }
 
-    // Deliberately no logEvent = true will leak raw password
-    // and Powertools event-logging would put it in CloudWatch.
+    private void warmUp() {
+        try {
+            cognitoClient.initiateAuth(InitiateAuthRequest.builder()
+                    .authFlow(AuthFlowType.USER_PASSWORD_AUTH)
+                    .clientId(clientId)
+                    .authParameters(Map.of("USERNAME", "snapstart-warmup", "PASSWORD", "invalid"))
+                    .build());
+        } catch (CognitoIdentityProviderException e) {
+            log.info("Expect warm up request fails!", e);
+        }
+    }
+
+    // logEvent = true will leak raw password
     @Logging
     @FlushMetrics(captureColdStart = true)
     @Override

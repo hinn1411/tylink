@@ -19,6 +19,7 @@
         <awssdk.bom.version>2.42.15</awssdk.bom.version>
         <testcontainers.bom.version>1.21.3</testcontainers.bom.version>
         <aws-xray-recorder.version>2.18.2</aws-xray-recorder.version>
+        <crac.version>1.4.0</crac.version>
     </properties>
 
     <dependencyManagement>
@@ -99,6 +100,13 @@
           <groupId>com.auth0</groupId>
           <artifactId>jwks-rsa</artifactId>
           <version>${jwks-rsa.version}</version>
+        </dependency>
+        <!-- SnapStart Runtime Hooks API: beforeCheckpoint/afterRestore, used to re-prime
+             AWS SDK client connections after a snapshot restore -->
+        <dependency>
+          <groupId>org.crac</groupId>
+          <artifactId>crac</artifactId>
+          <version>${crac.version}</version>
         </dependency>
 
         <!-- Unit tests -->
