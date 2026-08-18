@@ -80,11 +80,8 @@ public class ShortenUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent, 
                 .build();
     }
 
-    // Separate DynamoDbClient from the main-table one above (DynamoDbUrlRepository warms its
-    // own) — this one backs Powertools' Idempotency persistence store and needs its own
-    // SnapStart re-prime. A missing key returns an empty response, not an exception — this
-    // only catches genuine failures (throttling, network issues), which must not fail the
-    // restore.
+    // Separate DynamoDbClient from DynamoDbUrlRepository's — this one backs Powertools'
+    // Idempotency persistence store and needs its own SnapStart re-prime.
     private void warmUp() {
         try {
             idempotencyClient.getItem(GetItemRequest.builder()

@@ -33,12 +33,6 @@ end of this phase.
 
 ---
 
-## Testing Strategy (all three layers)
-
-- **Unit test**: pure Java, no AWS. Base62 encode/decode, expiry validation, idempotency-key derivation — JUnit5. Handler logic tested with **Mockito** mocking the `UrlRepository` interface (N4) — this interface boundary is *why* unit testing a Lambda handler is possible at all; without it you'd be mocking the DynamoDB SDK client directly, which is brittle.
-- **Integration test**: `sam local start-api` + **DynamoDB Local** (Docker) — fast, free, fully offline test of the real Lambda-to-DynamoDB interaction. A real ephemeral dev stack (`sam deploy` → test → `sam delete`) is the more honest way to integration-test the Cognito+API Gateway+Lambda chain end-to-end, as a CI stretch goal.
-- **Performance/load test**: outermost layer, run against a real deployed stack — the subject of this phase.
-
 ## Verification
 
 Phase 3 is done when: a load-test report exists with k6 output + correlated CloudWatch/X-Ray screenshots, stating a measured capacity ("X RPS at p99 < Yms") and the actual bottleneck found.

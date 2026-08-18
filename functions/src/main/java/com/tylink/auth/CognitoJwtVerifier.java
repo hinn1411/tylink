@@ -42,8 +42,8 @@ public class CognitoJwtVerifier {
     private void warmUp() {
         try {
             jwkProvider.get("snapstart-warmup");
-        } catch (JwkException expected) {
-            log.info("Expect warm up request fails!");
+        } catch (JwkException e) {
+            log.info("Expect warm up request fails!", e);
         }
     }
 

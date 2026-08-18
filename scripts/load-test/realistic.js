@@ -6,10 +6,8 @@ import {
   crudLifecycle,
 } from './common/lib.js';
 
-// Realistic traffic profile (docs/plans/03-testing.md step 1, k6 doc Part 8.1): steady
-// declared rate for redirects, ramping concurrency for the CRUD flow, N1 thresholds with
-// no slack and no abortOnFail — this measures pass/fail against the real SLO, it doesn't
-// stop early.
+// Realistic traffic profile (docs/plans/03-testing.md step 1): steady load against the
+// SLO, reporting pass/fail without stopping early.
 export const options = {
   scenarios: {
     hot_key_redirect: {

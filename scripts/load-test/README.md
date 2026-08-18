@@ -1,30 +1,24 @@
 # Load Testing
 
-k6 harness for `docs/plans/03-testing.md`: two load profiles exercising three separately
-tagged traffic types — hot-key redirect, cold-key redirect, auth+CRUD — against N1's
-latency SLO (p99 < 1000ms, per
-`docs/learning/14-load-testing-with-k6.md` Part 4.1/8.1).
+k6 harness for `docs/plans/03-load-testing.md`, testing redirect (hot/cold) and auth+CRUD traffic
+against N1's SLO (p99 < 1000ms).
 
-- `common/lib.js` — shared setup/login, redirect, and CRUD-lifecycle logic. Not run directly.
-- `realistic.js` — steady declared load, N1 thresholds, no `abortOnFail`. Reports
-  pass/fail against the SLO without stopping early.
-- `stress.js` — climbing load with `abortOnFail`, stops the instant the SLO breaks. The
-  stage k6 was executing when it aborts is the measured capacity number.
-- `data/seed-short-codes.sh` — seeds short codes and writes `data/short-codes.json`, which
-  both profiles load via `SharedArray`.
+- `common/lib.js` — shared setup/login and traffic logic. Not run directly.
+- `realistic.js` — steady load; reports pass/fail without stopping early.
+- `stress.js` — climbing load; stops the instant the SLO breaks, revealing measured capacity.
+- `data/seed-short-codes.sh` — seeds short codes into `data/short-codes.json` for both scripts.
 
 ## Prerequisites
 
-A registered test user (`../auth/register-test-user.sh` if you don't have one) and a
-seeded `data/short-codes.json`:
+A registered test user (`../auth/register-test-user.sh` if you don't have one) and seeded
+short codes:
 
 ```bash
 BASE_URL=http://localhost:3000 ./data/seed-short-codes.sh          # against sam local start-api
 BASE_URL=https://<api-id>.execute-api.<region>.amazonaws.com ./data/seed-short-codes.sh  # against a deployed stack
 ```
 
-`data/short-codes.json` is gitignored — it's tied to whichever `BASE_URL` seeded it and is
-meaningless against a different environment. Re-seed after switching targets.
+`data/short-codes.json` is gitignored — re-seed after switching targets.
 
 ## Running
 
@@ -33,18 +27,11 @@ k6 run -e USERNAME=... -e PASSWORD=... -e BASE_URL=http://localhost:3000 realist
 k6 run -e USERNAME=... -e PASSWORD=... -e BASE_URL=http://localhost:3000 stress.js
 ```
 
-Omit `-e BASE_URL` to default to `http://localhost:3000`. Point it at the deployed
-stack's `HttpApiUrl` output (`sam list stack-outputs --stack-name <stack>`) for the real
-capstone run described in `docs/learning/14-load-testing-with-k6.md` Lab 9.
-
-**`stress.js` drives real load** — up to ~400 req/s per scenario (hot/cold/crud) by its
-final stage. Pointed at the deployed stack, that's real Lambda invocations, real DynamoDB
-capacity, and will very likely trip the CloudWatch alarms added on this branch. Run it
-against the deployed endpoint deliberately, not by habit — `realistic.js` is the one to
-reach for by default.
+Omit `-e BASE_URL` to default to `http://localhost:3000`, or point it at a deployed stack's
+`HttpApiUrl`. Default to `realistic.js` — `stress.js` drives real load (up to ~400 req/s) and
+will likely trip CloudWatch alarms if run against a deployed stack.
 
 ## Correlating with CloudWatch/X-Ray
 
-Both scripts log an ISO start timestamp (in `setup()`) and end timestamp (in
-`teardown()`) to stdout — use that window verbatim as the CloudWatch dashboard time range
-and X-Ray trace filter, per `docs/plans/03-testing.md` step 5.
+Both scripts log a start/end timestamp to stdout — use that window as the CloudWatch/X-Ray
+time range.

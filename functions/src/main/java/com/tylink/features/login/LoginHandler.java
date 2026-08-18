@@ -55,7 +55,7 @@ public class LoginHandler implements RequestHandler<APIGatewayV2HTTPEvent, APIGa
                     .authParameters(Map.of("USERNAME", "snapstart-warmup", "PASSWORD", "invalid"))
                     .build());
         } catch (CognitoIdentityProviderException e) {
-            log.info("Expect warn up request fails!");
+            log.info("Expect warm up request fails!", e);
         }
     }
 

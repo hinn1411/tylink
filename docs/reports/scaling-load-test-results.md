@@ -84,7 +84,7 @@ CloudWatch/Service Quotas evidence above substitutes for it here.
 
 ### 1. SnapStart
 
-Full investigation at `docs/technical_decisions/14-snapstart-restore-latency.md`.
+Full investigation at `docs/technical_decisions/14-snapstart-restore-level.md`.
 
 **Before → After**
 
@@ -305,7 +305,7 @@ TBD
 
 ## Capstone Stress-to-Failure Run
 
-`stress.js` run against the deployed stack (`docs/plans/03-testing.md` step 7), after all
+`stress.js` run against the deployed stack (`docs/plans/03-load-testing.md` step 7), after all
 four techniques above are applied. Optionally run once via the AWS Distributed Load
 Testing solution for a larger-scale confirmation, then torn down immediately
 (`docs/plans/00-overview.md` stack table).
@@ -335,7 +335,7 @@ number.
 
 ## Beyond This Project
 
-Next scaling steps not built here, per `docs/plans/03-testing.md` step 7:
+Next scaling steps not built here, per `docs/plans/03-load-testing.md` step 7:
 
 | Option | When it would actually be needed |
 |---|---|

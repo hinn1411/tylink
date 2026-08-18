@@ -43,8 +43,6 @@ public class DynamoDbUrlRepository implements UrlRepository {
         SnapStartWarmup.registerAfterRestore(this::warmUp);
     }
 
-    // A missing key returns an empty response, not an exception — this only catches genuine
-    // failures (throttling, network issues), which must not fail the restore.
     private void warmUp() {
         try {
             dynamoDb.getItem(GetItemRequest.builder()

@@ -59,9 +59,7 @@ Resources:
 
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
-    # SupportedIdentityProviders: [Google] below references GoogleIdentityProvider by name, but
-    # CloudFormation can't infer that from ProviderName (a plain string), so without this
-    # DependsOn it may try to create the client before the identity provider exists.
+    # Ensures the Google identity provider exists before the client does.
     DependsOn: GoogleIdentityProvider
     Properties:
       UserPoolId: !Ref UserPool
@@ -81,9 +79,7 @@ Resources:
         - email
         - profile
       AllowedOAuthFlowsUserPoolClient: true
-      # Where Cognito sends the browser after step 8/9 of the broker flow (§8 in
-      # docs/learning/09-oauth2-and-oidc.md). Placeholder until the frontend exists — swap for
-      # the real app URL(s) once one does.
+      # Placeholder until the frontend exists — swap for the real app URL(s).
       CallbackURLs:
         - https://example.com/callback
       LogoutURLs:
@@ -93,8 +89,7 @@ Resources:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
       UserPoolId: !Ref UserPool
-      # Domain prefixes must be unique across ALL AWS accounts in the region, not just this
-      # account — AccountId suffix guarantees that (StackName alone could collide).
+      # AccountId suffix keeps the domain prefix globally unique.
       Domain: !Sub "${AWS::StackName}-${AWS::AccountId}"
 
   GoogleIdentityProvider:
@@ -151,11 +146,8 @@ Resources:
     Properties:
       AccessLogSettings:
         DestinationArn: !GetAtt HttpApiAccessLogGroup.Arn
-        # Per-request status + the raw integration error (e.g. Lambda's TooManyRequestsException
-        # message) that never otherwise appears anywhere: a throttled Lambda invocation produces
-        # no function log and no X-Ray segment (the function never runs), so this access log is
-        # the only place that failure mode is visible per-request rather than as an aggregate
-        # CloudWatch metric count.
+        # Captures per-request status and integration errors, including throttled invocations
+        # that leave no other trace.
         Format: >-
           {"requestId":"$context.requestId","requestTime":"$context.requestTime",
           "sourceIp":"$context.identity.sourceIp","httpMethod":"$context.httpMethod",
@@ -172,17 +164,8 @@ Resources:
             FunctionArn: !Ref ExtractTokenAuthorizerFunction.Alias
             AuthorizerPayloadFormatVersion: "2.0"
             EnableSimpleResponses: true
-            # Identity source is $context.routeKey (API Gateway-synthesized, never client-
-            # supplied), not the Authorization header: a declared header identity source makes
-            # API Gateway treat it as required and reject anonymous requests with a 401 before
-            # ever invoking the Lambda — defeating "never denies a request." routeKey is always
-            # present once a route matches, so this identity source can never be "missing,"
-            # meaning API Gateway invokes this authorizer unconditionally on every call.
-            # (Omitting Identity entirely looks equivalent on paper, but API Gateway's OpenAPI
-            # reimport doesn't reliably clear a previously-set identitySource just because a
-            # redeploy's definition is silent about it — verified live: after removing the
-            # Identity block and redeploying, GET /authorizers still showed the old
-            # $request.header.Authorization until explicitly overwritten with a new value.)
+            # Ensures this authorizer runs unconditionally on every request, including
+            # anonymous ones.
             Identity:
               Context:
                 - routeKey
@@ -200,11 +183,7 @@ Resources:
       LogGroupName: !Sub "/aws/apigateway/${AWS::StackName}-http-api-access-logs"
       RetentionInDays: 14
 
-  # API Gateway (REST and HTTP alike) refuses to deliver any access/execution logs until this
-  # account-level CloudWatch Logs role is set — without it, enabling AccessLogSettings above
-  # fails deployment with "CloudWatch Logs role ARN must be set in account settings." This is
-  # an account/region-wide setting (not scoped to this one API), but declaring it here keeps it
-  # under IaC instead of a manual one-time console click.
+  # Account-level role required for API Gateway to write access logs.
   ApiGatewayCloudWatchRole:
     Type: AWS::IAM::Role
     Properties:
@@ -223,11 +202,7 @@ Resources:
     Properties:
       CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
 
-  # SAM does not generate permission for custom authorizer automatically. Must target the
-  # `live` alias, not the base function — Lambda's resource policy is qualifier-specific,
-  # so a permission scoped to the unqualified function does NOT cover invoking a specific
-  # alias (confirmed live: API Gateway returned 500s for every request through this
-  # authorizer until this was pointed at .Alias, matching FunctionArn below).
+  # Grants API Gateway permission to invoke the authorizer's live alias.
   ExtractTokenAuthorizerPermission:
     Type: AWS::Lambda::Permission
     Properties:
