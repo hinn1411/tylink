@@ -21,6 +21,7 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.lambda.powertools.logging.Logging;
 import software.amazon.lambda.powertools.metrics.FlushMetrics;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -29,15 +30,18 @@ public class RedirectUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent,
     private static final Logger log = LogManager.getLogger(RedirectUrlHandler.class);
 
     private final UrlRepository urlRepository;
+    private final long TIME_TO_LIVE;
 
     public RedirectUrlHandler() {
         this(new DynamoDbUrlRepository(
                 DynamoDbClient.builder().overrideConfiguration(TracingUtils.xrayOverrideConfiguration()).build(),
-                System.getenv("TABLE_NAME")));
+                System.getenv("TABLE_NAME")),
+                Long.parseLong(System.getenv("TIME_TO_LIVE")));
     }
 
-    RedirectUrlHandler(UrlRepository urlRepository) {
+    RedirectUrlHandler(UrlRepository urlRepository, long TIME_TO_LIVE) {
         this.urlRepository = urlRepository;
+        this.TIME_TO_LIVE = TIME_TO_LIVE;
     }
 
     @Logging(logEvent = true)
@@ -83,8 +87,17 @@ public class RedirectUrlHandler implements RequestHandler<APIGatewayV2HTTPEvent,
         RequestUtils.recordSuccess(TylinkResultCode.SUCCESS);
         return APIGatewayV2HTTPResponse.builder()
                 .withStatusCode(307)
-                .withHeaders(Map.of("Location", shortUrl.longUrl()))
+                .withHeaders(buildHeaders(shortUrl))
                 .withBody("")
                 .build();
+    }
+
+    private Map<String, String> buildHeaders(ShortUrl shortUrl) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Location", shortUrl.longUrl());
+        if (shortUrl.visibility() == Visibility.PUBLIC) {
+            headers.put("Cache-Control", "public, max-age=" + TIME_TO_LIVE);
+        }
+        return Map.copyOf(headers);
     }
 }

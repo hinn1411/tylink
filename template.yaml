@@ -287,6 +287,9 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref UrlTable
+          # Only used when the short code is PUBLIC + ACTIVE — see RedirectUrlHandler and
+          # docs/technical_decisions/15-cloudfront-edge-caching.md.
+          TIME_TO_LIVE: "300"
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref UrlTable
@@ -400,9 +403,21 @@ Resources:
         LoginFunctionName: !Ref LoginFunction
         ExtractTokenAuthorizerFunctionName: !Ref ExtractTokenAuthorizerFunction
 
+  # Nested stack for the CloudFront distribution in front of HttpApi
+  CloudFrontStack:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: infrastructures/cloudfront.yaml
+      Parameters:
+        RootStackName: !Ref AWS::StackName
+        HttpApiId: !Ref HttpApi
+
 Outputs:
+  CloudFrontUrl:
+    Description: "CloudFront distribution URL — primary entry point for the API (edge-cached redirects)"
+    Value: !Sub "https://${CloudFrontStack.Outputs.DistributionDomainName}"
   HttpApiUrl:
-    Description: "Base URL for the tylink HTTP API"
+    Description: "Base URL for the tylink HTTP API, direct to the API Gateway origin (bypasses CloudFront's edge cache — use CloudFrontUrl for normal use)"
     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
   ShortenUrlApi:
     Description: "API Gateway endpoint URL for the shorten-URL route"

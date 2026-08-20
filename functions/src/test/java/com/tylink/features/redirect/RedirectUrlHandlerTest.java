@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -26,6 +27,7 @@ class RedirectUrlHandlerTest {
     private static final String LONG_URL = "https://example.com/some/very/long/path";
     private static final String OWNER_ID = "11111111-1111-1111-1111-111111111111";
     private static final String OTHER_OWNER_ID = "22222222-2222-2222-2222-222222222222";
+    private static final long MAX_AGE_SECONDS = 300L;
 
     private UrlRepository urlRepository;
     private RedirectUrlHandler handler;
@@ -33,7 +35,7 @@ class RedirectUrlHandlerTest {
     @BeforeEach
     void setUp() {
         urlRepository = mock(UrlRepository.class);
-        handler = new RedirectUrlHandler(urlRepository);
+        handler = new RedirectUrlHandler(urlRepository, MAX_AGE_SECONDS);
     }
 
     private APIGatewayV2HTTPEvent eventFor(String shortCode, String ownerId) {
@@ -71,6 +73,16 @@ class RedirectUrlHandlerTest {
 
         assertEquals(307, response.getStatusCode());
         assertEquals(LONG_URL, response.getHeaders().get("Location"));
+    }
+
+    @Test
+    void handleRequest_publicActiveUrl_setsCacheControlPublicMaxAge() {
+        when(urlRepository.findByShortCode(SHORT_CODE))
+                .thenReturn(shortUrl(null, Visibility.PUBLIC, UrlStatus.ACTIVE));
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(anonymousEventFor(SHORT_CODE), null);
+
+        assertEquals("public, max-age=" + MAX_AGE_SECONDS, response.getHeaders().get("Cache-Control"));
     }
 
     @Test
@@ -113,6 +125,16 @@ class RedirectUrlHandlerTest {
 
         assertEquals(307, response.getStatusCode());
         assertEquals(LONG_URL, response.getHeaders().get("Location"));
+    }
+
+    @Test
+    void handleRequest_privateActiveUrlOwnerCaller_omitsCacheControlHeader() {
+        when(urlRepository.findByShortCode(SHORT_CODE))
+                .thenReturn(shortUrl(OWNER_ID, Visibility.PRIVATE, UrlStatus.ACTIVE));
+
+        APIGatewayV2HTTPResponse response = handler.handleRequest(eventFor(SHORT_CODE, OWNER_ID), null);
+
+        assertNull(response.getHeaders().get("Cache-Control"));
     }
 
     @Test
