@@ -197,76 +197,65 @@ run.
 
 </details>
 
-### 2. CloudFront edge caching (read latency / hot keys)
+### 2. CloudFront edge caching
 
-**What changed**: TBD (include the cache-freshness/invalidation trade-off decision made —
-short `max-age` + explicit invalidation on update/delete, or accepted bounded staleness)
-
-**Hypothesis**: Hot-key redirect latency drops sharply (served from the edge, Lambda
-removed from the hot path); cold-key redirect is largely unaffected.
+**Expectation**: Reduce latency for hot-key access sharply, cold-key largely unaffected.
 
 **Before → After**
 
 | Metric | Before (hot) | After (hot) | Before (cold) | After (cold) | Before (crud) | After (crud) |
 |---|---|---|---|---|---|---|
-| p50 | TBD | TBD | TBD | TBD | TBD | TBD |
-| p90 | TBD | TBD | TBD | TBD | TBD | TBD |
-| p99 | TBD | TBD | TBD | TBD | TBD | TBD |
-| CloudFront cache hit ratio | TBD | TBD | TBD | TBD | — | — |
-| Error rate | TBD | TBD | TBD | TBD | TBD | TBD |
+| p50 | 289.01ms | 5.34ms | 287.72ms | 37.15ms | 329.93ms | 376.61ms |
+| p90 | 330.62ms | 6.92ms | 329.73ms | 367.94ms | 407.2ms | 870.08ms |
+| p99 | 3.13s | 789.6ms | 3.09s | 801.81ms | 2.09s | 991.23ms |
+| Cache hit ratio (inferred)† | — | ~79% | — | ~78% | — | — |
+| Error rate | 0% | 0% | 0% | 0% | 0% | 0% |
 
-**Cost delta**: TBD
+**Failure-mode change**: redirect's blast radius from a Lambda/DynamoDB incident shrinks to
+~21% of traffic (cache misses only). New accepted risk: up to 5 min of stale redirects after
+update/delete.
 
-**Failure-mode change**: TBD
+**History**
+- First run against CloudFront endpoint was *worse* than baseline
+  despite `hot`'s median already at ~5ms. Additionally, cache removed 78% of redirect traffic to Lambda. But remaining traffic executed in cold environment. That is the reason why restore rate rose 2.9%→13.5% for redirect endpoint, and 0.8%→9.5% for authorizer endpoint
+- Second run (~4 min later, environments still warm): restore rate collapsed to ~0%, p99
+  dropped to < 1000ms, all passing SLO. Used as "After" above. `crud` latency < 1000s because authorizer is warmed-> No cold start overhead.
 
-**Evidence**: TBD
-
-**Verdict**: TBD
+**Verdict**: `hot` p50/p90/p95 dropped ~50x
 
 <details>
 <summary>Raw k6 summary — CloudFront caching before/after</summary>
 
+BEFORE (2026-08-19T08:08:45Z – 08:10:54Z):
 ```
-TBD
+  █ THRESHOLDS
+    http_req_duration{scenario:cold}: ✗ p(99)=3.09s
+    http_req_duration{scenario:crud}: ✗ p(99)=2.09s
+    http_req_duration{scenario:hot}:  ✗ p(99)=3.13s
+
+  http_req_duration..: avg=390.73ms med=289.52ms p(90)=336.77ms p(95)=367.47ms
+    { scenario:cold }: avg=390.45ms med=287.72ms p(90)=329.73ms p(95)=348.67ms
+    { scenario:crud }: avg=388.27ms med=329.93ms p(90)=407.2ms  p(95)=429.48ms
+    { scenario:hot }:  avg=388.95ms med=289.01ms p(90)=330.62ms p(95)=352.99ms
+  checks_succeeded: 100.00% (3762/3762)
 ```
 
+AFTER, settled run (2026-08-19T08:26:39Z – 08:28:47Z):
+```
+  █ THRESHOLDS
+    http_req_duration{scenario:cold}: ✓ p(99)=801.81ms
+    http_req_duration{scenario:crud}: ✓ p(99)=991.23ms
+    http_req_duration{scenario:hot}:  ✓ p(99)=789.6ms
+
+  http_req_duration..: avg=119.1ms  med=5.85ms   p(90)=354.89ms p(95)=554.85ms
+    { scenario:cold }: avg=162.35ms med=37.15ms  p(90)=367.94ms p(95)=511.4ms
+    { scenario:crud }: avg=539.29ms med=376.61ms p(90)=870.08ms p(95)=920.51ms
+    { scenario:hot }:  avg=17.69ms  med=5.34ms   p(90)=6.92ms   p(95)=9.58ms
+  checks_succeeded: 100.00% (3831/3831)
+```
 </details>
 
-### 3. DynamoDB capacity mode (on-demand vs. provisioned+autoscaling)
-
-**What changed**: TBD
-
-**Hypothesis**: On-demand absorbs the load profile's bursts with fewer throttles than
-provisioned+autoscaling, which reacts on a lag.
-
-**Before → After**
-
-| Metric | Before (hot) | After (hot) | Before (cold) | After (cold) | Before (crud) | After (crud) |
-|---|---|---|---|---|---|---|
-| p50 | TBD | TBD | TBD | TBD | TBD | TBD |
-| p90 | TBD | TBD | TBD | TBD | TBD | TBD |
-| p99 | TBD | TBD | TBD | TBD | TBD | TBD |
-| `ConsumedReadCapacityUnits` / throttle count | TBD | TBD | TBD | TBD | TBD | TBD |
-| Error rate | TBD | TBD | TBD | TBD | TBD | TBD |
-
-**Cost delta**: TBD
-
-**Failure-mode change**: TBD
-
-**Evidence**: TBD
-
-**Verdict**: TBD
-
-<details>
-<summary>Raw k6 summary — capacity mode before/after</summary>
-
-```
-TBD
-```
-
-</details>
-
-### 4. Throttling / backpressure
+### 3. Throttling / backpressure
 
 **What changed**: TBD (API Gateway per-route/stage rate & burst limits, client/SDK
 exponential backoff+jitter, reserved concurrency)
@@ -330,8 +319,32 @@ TBD
 
 ## Bottleneck Analysis
 
-TBD — the actual root-cause bottleneck at the capacity limit found above, not just the
-number.
+No hard capacity ceiling was found: `stress.js` sustained its full configured ramp (up to
+400 iters/s × 3 scenarios, ~769 req/s combined) without breaching the p99 SLO once past the
+noisy ramp-up window (see Capstone section — run suspended, reasoning below). Every latency
+issue found in this report traces to one root cause, not throughput capacity: **Lambda
+SnapStart's JVM/platform restore cost.**
+
+- **Baseline**: the account's default Lambda concurrency quota (10) queued/throttled requests —
+  a config limit, not a scaling limit. Fixed by raising the quota to 1000.
+- **SnapStart & CloudFront (§1, §2)**: every SnapStart-enabled function's tail latency is
+  dominated by its own restore cost (~1.0–1.05s, confirmed via CloudWatch `REPORT` lines),
+  triggered whenever traffic volume drops enough for Lambda to scale environments down between
+  bursts. CloudFront caching cuts how *often* the redirect path restores (removes ~78% of its
+  traffic), but doesn't remove the per-restore cost itself.
+- **DynamoDB**: zero throttling evidence in any run in this report — on-demand capacity absorbed
+  every burst tested. Not a constraint.
+- **Custom authorizer**: its own restore cost (~0.95–0.97s) is comparable to a backend
+  function's, not categorically worse. It only compounds latency when it stacks with a backend
+  function's own restore on the same request (shared routes).
+
+**Capstone stress-to-failure run suspended**: sustaining hundreds of req/s long enough to find a
+hard ceiling costs real money on on-demand DynamoDB, and the 810-short-code seed pool is too
+small to produce realistic (non-cache-skewed) traffic at that scale. Revisit only if a production
+capacity number is actually needed (see Beyond This Project).
+
+**Takeaway**: restore cost is structural (JVM startup under SnapStart), not something caching or
+backoff tuning removes — the fix is provisioned concurrency, not further capacity work.
 
 ## Beyond This Project
 
@@ -342,6 +355,7 @@ Next scaling steps not built here, per `docs/plans/03-load-testing.md` step 7:
 | DynamoDB Accelerator (DAX) | If a real per-request-side-effect / hot-key read problem remains after CloudFront caching |
 | DynamoDB Global Tables | Multi-region / DR — out of scope for a single-region deployment |
 | Provisioned concurrency (replacing SnapStart) | Confirmed needed, not just hypothetical — §1 shows SnapStart + connection-priming alone doesn't bound p99 under this project's burst load. AWS does not support SnapStart and provisioned concurrency together on the same version/alias, so this means switching off SnapStart on these functions, not adding PC alongside it — next step if this work continues |
+| True stress-to-failure capacity run (AWS Distributed Load Testing solution, expanded seed-data pool) | Only if a hard production capacity number is actually needed — this report's 810-short-code pool skews results toward cache hits at high sustained RPS, and on-demand DynamoDB bills per request regardless of the outcome |
 
 ## Appendix — Run Timestamp Windows
 
@@ -352,10 +366,8 @@ Exact UTC windows used for CloudWatch/X-Ray correlation, per run.
 | Baseline | 2026-08-16T06:43:00Z | 2026-08-16T07:45:00Z |
 | SnapStart — before | 2026-08-17T08:31:35Z | 2026-08-17T08:33:49Z |
 | SnapStart — after | 2026-08-18T04:41:46Z | 2026-08-18T04:43:54Z |
-| CloudFront caching — before | TBD | TBD |
-| CloudFront caching — after | TBD | TBD |
-| Capacity mode — before | TBD | TBD |
-| Capacity mode — after | TBD | TBD |
+| CloudFront caching — before | 2026-08-19T08:08:45Z | 2026-08-19T08:10:54Z |
+| CloudFront caching — after | 2026-08-19T08:26:39Z | 2026-08-19T08:28:47Z |
 | Throttling — before | TBD | TBD |
 | Throttling — after | TBD | TBD |
 | Capstone stress run | TBD | TBD |

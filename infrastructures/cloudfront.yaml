@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Nested stack: CloudFront distribution fronting the HTTP API (default *.cloudfront.net domain).
+  See docs/technical_decisions/15-cloudfront-edge-caching.md for the caching design.
+
+Parameters:
+  # AWS::StackName resolves to this nested stack's own name, not the root's.
+  RootStackName:
+    Type: String
+  HttpApiId:
+    Type: String
+
+Resources:
+  # Caches only the redirect route, only PUBLIC + ACTIVE responses.
+  RedirectCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub "${RootStackName}-redirect-cache"
+        Comment: "Caches only Cache-Control: public responses from RedirectUrlHandler."
+        MinTTL: 0
+        DefaultTTL: 0
+        MaxTTL: 300
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+
+  ApiDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        HttpVersion: http2
+        Comment: !Sub "${RootStackName} — CloudFront in front of the HTTP API"
+        Origins:
+          - Id: HttpApiOrigin
+            DomainName: !Sub "${HttpApiId}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+        # All routes except the redirect path — pass-through, uncached.
+        DefaultCacheBehavior:
+          TargetOriginId: HttpApiOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+          # Managed-CachingDisabled
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          # Managed-AllViewerExceptHostHeader
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+        # Redirect route (GET /v1/urls/{shortCode}) — cache hits skip Lambda/DynamoDB.
+        CacheBehaviors:
+          - PathPattern: /v1/urls/*
+            TargetOriginId: HttpApiOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - POST
+              - PATCH
+              - DELETE
+            CachedMethods:
+              - GET
+              - HEAD
+            CachePolicyId: !Ref RedirectCachePolicy
+            # Managed-AllViewerExceptHostHeader
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+
+Outputs:
+  DistributionDomainName:
+    Description: "CloudFront distribution domain — primary entry point for the API"
+    Value: !GetAtt ApiDistribution.DomainName
+  DistributionId:
+    Description: "CloudFront distribution ID"
+    Value: !Ref ApiDistribution

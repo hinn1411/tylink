@@ -28,8 +28,10 @@ k6 run -e USERNAME=... -e PASSWORD=... -e BASE_URL=http://localhost:3000 stress.
 ```
 
 Omit `-e BASE_URL` to default to `http://localhost:3000`, or point it at a deployed stack's
-`HttpApiUrl`. Default to `realistic.js` — `stress.js` drives real load (up to ~400 req/s) and
-will likely trip CloudWatch alarms if run against a deployed stack.
+`HttpApiUrl` (direct to origin, bypasses CloudFront's edge cache) or `CloudFrontUrl` (the
+before/after target for the redirect hot-key/cold-key cache scenarios in
+`docs/plans/03-load-testing.md`). Default to `realistic.js` — `stress.js` drives real load (up to
+~400 req/s) and will likely trip CloudWatch alarms if run against a deployed stack.
 
 ## Correlating with CloudWatch/X-Ray
 
