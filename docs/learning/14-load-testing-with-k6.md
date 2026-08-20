@@ -53,7 +53,7 @@ right place for one-time work like authenticating — Part 5 builds on this dire
 
 Write a script that sends one `GET` request to `http://localhost:3000/v1/urls/{shortCode}`
 (seed a real short code first via `sam local invoke ShortenUrlFunction --event
-events/shortenPublicUrl.json`, or `curl -X POST` it) and run it with 1 VU for 5 seconds.
+events/shorten/shortenPublicUrl.json`, or `curl -X POST` it) and run it with 1 VU for 5 seconds.
 Run: `k6 run script.js`. Read the summary output — note `http_req_duration`,
 `http_reqs`, `iterations`.
 

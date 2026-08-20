@@ -18,7 +18,7 @@ CloudFront caching is gated on visibility). Prerequisites and full setup steps a
 sam build                                    # build all functions; output in .aws-sam/build/
 sam build --use-container                    # build inside a container matching Lambda's runtime exactly
 
-sam local invoke ShortenUrlFunction --event events/shortenUrlPublic.authenticated.json
+sam local invoke ShortenUrlFunction --event events/shorten/shortenUrlPublic.authenticated.json
 sam local start-api --port 3000              # full HTTP API locally, reads routes from template.yaml
 
 cd functions
