@@ -81,7 +81,7 @@ UserPool ──► UserPoolClient ──► ExtractTokenAuthorizerFunction (env 
   ExtractTokenAuthorizer`) — it's a per-route reference, not an API-wide default.
 - At request time API Gateway invokes the authorizer first, then — because `isAuthorized` is always
   `true` — always proceeds to `ShortenUrlFunction`, injecting the authorizer's `context` map at
-  `requestContext.authorizer.lambda`. See `events/shortenPrivateUrl.json` /
+  `requestContext.authorizer.lambda`. See `events/shorten/shortenPrivateUrl.json` /
   `shortenPrivateUrl.invalidToken.json` for that shape with and without a verified caller.
 
 ## 6. Logical flow: Custom Authorizer ↔ Cognito
