@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Exercise the Google federation flow (docs/learning/09-oauth2-and-oidc.md §8) with no frontend:
-# prints the Hosted UI /authorize URL, waits for you to complete Google sign-in in a browser and
-# paste back the `code` it redirects with, then redeems that code at /oauth2/token.
+# Exercises the Google federation login flow (docs/learning/09-oauth2-and-oidc.md §8) with no
+# frontend.
 #
 # Fill in DOMAIN / CLIENT_ID below, or export them before running. Get them from stack outputs:
 #   sam list stack-outputs --output json | jq -r '.[] | select(.OutputKey=="CognitoHostedUiDomain" or .OutputKey=="UserPoolClientId")'
@@ -9,9 +8,7 @@ set -euo pipefail
 
 DOMAIN="${DOMAIN:-https://tylink-725069913301.auth.us-east-1.amazoncognito.com}"
 CLIENT_ID="${CLIENT_ID:-1c07kmvifk3fqltffhg557ln0k}"
-# Must exactly match one of UserPoolClient's CallbackURLs in template.yaml. It doesn't need to
-# resolve to anything real for this manual test — the code you need shows up in the browser's
-# address bar even though the page itself 404s.
+# Must match one of UserPoolClient's CallbackURLs in template.yaml.
 REDIRECT_URI="${REDIRECT_URI:-https://example.com/callback}"
 SCOPE="openid email profile"
 
@@ -27,9 +24,8 @@ urlencode() {
   printf '%s' "$encoded"
 }
 
-# PKCE (docs/learning/09-oauth2-and-oidc.md §3) is mandatory here: UserPoolClient has
-# GenerateSecret: false, so code_verifier is this script's only proof at /oauth2/token that it's
-# the same party that started the /authorize redirect.
+# Generates the PKCE verifier/challenge (docs/learning/09-oauth2-and-oidc.md §3) for the token
+# exchange.
 CODE_VERIFIER=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')
 CODE_CHALLENGE=$(printf '%s' "$CODE_VERIFIER" | openssl dgst -sha256 -binary | openssl base64 | tr '+/' '-_' | tr -d '=')
 STATE=$(openssl rand -hex 16)
@@ -45,9 +41,7 @@ echo "   ${REDIRECT_URI}?code=...&state=..."
 echo
 read -rp "Paste the full address-bar URL here (or just the code): " PASTED
 
-# Accept either the whole callback URL or a bare code — extracting via the 'code=' marker means
-# accidentally including '&state=...' in the paste (easy to do selecting from the address bar)
-# doesn't corrupt the code, unlike passing $PASTED to /oauth2/token as-is.
+# Accepts either the full callback URL or a bare code.
 if [[ "$PASTED" == *"code="* ]]; then
   CODE="${PASTED#*code=}"
   CODE="${CODE%%&*}"

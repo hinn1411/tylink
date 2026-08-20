@@ -2,21 +2,17 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
   Nested stack: one AWS/Lambda Errors alarm per function, routed to a shared SNS email topic.
-  Split out of template.yaml like dashboards.yaml, for the same reason: only reads function
-  names in, only the topic ARN read back out. Supports the N6 MTTD check in
-  docs/plans/02-scaling.md step 3.
+  Supports the N6 MTTD check in docs/plans/02-scaling.md step 3.
 
 Parameters:
-  # Not AWS::StackName: inside a nested stack that resolves to the nested stack's own
-  # auto-generated name (e.g. tylink-AlarmStack-XYZ), not "tylink" — passed down explicitly so
-  # AlarmName/TopicName stay stable.
+  # AWS::StackName resolves to this nested stack's own name, not the root's.
   RootStackName:
     Type: String
   AlertEmail:
     Type: String
     Description: >
-      SNS alarm-topic subscriber. AWS emails a confirmation link on creation (and again if this
-      value changes) — notifications don't deliver until it's clicked.
+      SNS alarm-topic subscriber email. Requires confirming a link AWS sends before
+      notifications deliver.
   ShortenUrlFunctionName:
     Type: String
   RedirectUrlFunctionName:
@@ -33,8 +29,7 @@ Parameters:
     Type: String
 
 Resources:
-  # Shared by all 7 alarms below. Kept separate from any future AWS Budgets cost-guardrail
-  # topic (N5) — different concern, don't reuse for billing alerts.
+  # Shared by all 7 alarms below.
   AlarmTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -49,14 +44,7 @@ Resources:
       Protocol: email
       Endpoint: !Ref AlertEmail
 
-  # --- One AWS/Lambda Errors (Sum) alarm per function ---
-  #
-  # Threshold=1, no averaging window: at this traffic volume any single error is alarm-worthy.
-  # If real traffic makes this too chatty later, raise EvaluationPeriods/DatapointsToAlarm
-  # instead of changing the metric.
-  #
-  # TreatMissingData=notBreaching: Errors has no datapoint during idle 60s windows — without
-  # this the alarm sits in INSUFFICIENT_DATA instead of OK.
+  # One AWS/Lambda Errors (Sum) alarm per function, alarming on any single error.
   ShortenUrlFunctionErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:

@@ -6,8 +6,7 @@ import {
   crudLifecycle,
 } from './common/lib.js';
 
-// Stress-to-failure profile (docs/plans/03-testing.md step 1): climbs load until the SLO
-// breaks, then stops — the stage it was on when it aborts is the measured capacity.
+// Stress-to-failure profile (docs/plans/03-testing.md step 1): climbs load until the SLO breaks.
 export const options = {
   scenarios: {
     hot_key_redirect: {
@@ -60,7 +59,7 @@ export const options = {
     'http_req_duration{scenario:hot}': [{ threshold: 'p(99)<1000', abortOnFail: true }],
     'http_req_duration{scenario:cold}': [{ threshold: 'p(99)<1000', abortOnFail: true }],
     'http_req_duration{scenario:crud}': [{ threshold: 'p(99)<1000', abortOnFail: true }],
-    // Non-failing — only here to force a per-scenario 429 breakdown into the summary.
+    // Non-failing; reports per-scenario 429 counts in the summary.
     'throttled_responses{scenario:hot}': [{ threshold: 'count>=0', abortOnFail: false }],
     'throttled_responses{scenario:cold}': [{ threshold: 'count>=0', abortOnFail: false }],
     'throttled_responses{scenario:crud}': [{ threshold: 'count>=0', abortOnFail: false }],
