@@ -9,7 +9,8 @@ module (`functions/`) builds a shaded fat jar that every Lambda function in `tem
 shares as `CodeUri`. `docs/plans/00-overview.md` has the full requirements/decisions context;
 `docs/technical_decisions/*.md` are ADRs — check them before revisiting a decision that looks
 odd (e.g. why the authorizer never rejects, why `longUrl` validation has no denylist, why
-integration tests are a separate Maven profile).
+CloudFront caching is gated on visibility). Prerequisites and full setup steps are in
+`README.md`.
 
 ## Commands
 
@@ -28,6 +29,7 @@ mvn verify -Pintegration-test                # unit + integration tests (*IT.jav
                                               # spins up DynamoDB Local via Testcontainers
 
 sam deploy                                   # subsequent deploys (samconfig.toml has saved config)
+./scripts/deploy/deploy.sh                   # wraps `sam deploy`; pulls GoogleClientSecret fresh from SSM
 sam logs -n ShortenUrlFunction --stack-name tylink --tail
 ```
 
@@ -44,8 +46,9 @@ hook (`.pre-commit-config.yaml`).
 
 ```
 com.tylink.auth              — ExtractTokenAuthorizerHandler, CognitoJwtVerifier, AuthUtils
-com.tylink.features.<name>   — one package per Lambda-backed feature (shorten, redirect, list),
-                                each with its own Handler and any feature-local models/utils classes
+com.tylink.features.<name>   — one package per Lambda-backed feature (shorten, redirect, list,
+                                update, delete, login), each with its own Handler and any
+                                feature-local models/utils classes
 com.tylink.models            — ShortUrl, Visibility, UrlStatus — shared across features
 com.tylink.repository        — UrlRepository interface + UrlRepositoryException (the contract);
                                 com.tylink.repository.dynamodb has the DynamoDB impl (DynamoDbUrlRepository,
@@ -67,11 +70,10 @@ See `ShortenUrlHandler` for the canonical example.
 Two `HttpApi` authorizers, chosen per route by whether anonymous callers must be supported:
 `ExtractTokenAuthorizerFunction` (custom, never denies) for routes needing both anonymous and
 authenticated callers (`create`, `redirect`), and `NativeJwtAuthorizer` (native JWT) for routes
-that always require a caller (`list`). Handlers never see a raw JWT — they read identity via
-`AuthUtils.extractOwnerId(input)` (null means anonymous), which checks both the custom Lambda
-authorizer's context and a native JWT authorizer's claims, so callers don't need to know which
-authorizer sits in front of them. See `docs/technical_decisions/06-custom-jwt-authorizer.md` for
-why both authorizer types exist.
+that always require a caller (`list`, `update`, `delete`). Handlers never see a raw JWT — they
+read identity via `AuthUtils.extractOwnerId(input)` (null means anonymous). Login
+(`POST /v1/auth/login`) is public and separate from both — see
+`docs/technical_decisions/06-custom-jwt-authorizer.md`.
 
 ### Data model — single DynamoDB table, one item type
 
@@ -83,14 +85,22 @@ why both authorizer types exist.
 - `visibility` (`PUBLIC`/`PRIVATE`) and `status` (`ACTIVE`/`DELETED`) are plain attributes, not
   keys.
 
-See `docs/technical_decisions/05-dynamodb-access-patterns.md` for the access-pattern rationale
-and `09-list-urls-pagination-tradeoffs.md` for how `list` queries this GSI and its pagination
-trade-offs.
+See `docs/technical_decisions/05-dynamodb-access-patterns.md` and
+`09-list-urls-pagination-tradeoffs.md`.
+
+### Edge caching & throttling
+
+CloudFront fronts `HttpApi`; only `/v1/urls/*` is cacheable, and `RedirectUrlHandler` sets the
+`Cache-Control` header only for `visibility == PUBLIC` — never touch that condition without
+reading `docs/technical_decisions/15-cloudfront-edge-caching.md` first (a `PRIVATE` URL cached
+by mistake leaks through the shared edge cache). `HttpApi` also has per-route `RouteSettings`
+throttling limits, sized off origin traffic — see
+`docs/technical_decisions/16-throttling-backpressure.md`.
 
 ### Implementation status
 
-`ShortenUrlHandler`, `RedirectUrlHandler`, `ListUrlsHandler`, `DeleteUrlHandler`, and
-`UpdateUrlHandler` are all fully wired.
+`ShortenUrlHandler`, `RedirectUrlHandler`, `ListUrlsHandler`, `DeleteUrlHandler`,
+`UpdateUrlHandler`, and `LoginHandler` are all fully wired.
 
 ### Validation and response conventions
 
