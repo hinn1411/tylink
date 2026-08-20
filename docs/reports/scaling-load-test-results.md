@@ -259,15 +259,10 @@ AFTER, settled run (2026-08-19T08:26:39Z – 08:28:47Z):
 
 Full sizing/verification reasoning at `docs/technical_decisions/16-throttling-backpressure.md`.
 
-**What changed**: per-route API Gateway `RouteSettings` (redirect 40/80 rate/burst; create/list
-20/40; update/delete 15/30; login 10/20) plus a `requestWithRetry` full-jitter backoff helper in
-the k6 harness (429-only, 5 attempts).
+**Expectation**: no throttling at normal load (limits sized above `realistic.js`'s traffic); a
+spike concentrated on one route sheds there instead of degrading others.
 
-**Hypothesis**: a spike no longer starves other routes sharing Lambda concurrency; excess load is
-rejected at API Gateway instead of degrading every caller's latency.
-
-**Before → After** (`realistic.js`, regression check — no throttle should ever engage at normal
-traffic)
+**Before → After** (`realistic.js`, regression check)
 
 | Metric | Before (hot) | After (hot) | Before (cold) | After (cold) | Before (crud) | After (crud) |
 |---|---|---|---|---|---|---|
@@ -275,117 +270,43 @@ traffic)
 | p90 | 6.41ms | 6.22ms | 36.24ms | 7.43ms | 852.66ms | 832.28ms |
 | p99 | 30.33ms | 8.85ms | 753.7ms | 763.44ms | 922.86ms | 915.2ms |
 | 429 rate | 0% | 0% | 0% | 0% | 0% | 0% |
-| Error rate (checks_failed) | 0.03% | 0.00% | 0.03% | 0.00% | 0.03% | 0.00% |
 
-All within noise of each other — confirms the throttle never engages under normal load, as sized.
-
-**Cost delta**: ~$0 — route throttling is a built-in API Gateway stage feature.
-
-**Failure-mode change**: before, all routes shared one account-level throttle bucket and one
-Lambda concurrency pool — a spike anywhere could degrade everywhere. After, each route has an
-independent token bucket: confirmed below, a `crud` spike gets 429'd cheaply at API Gateway
-(no Lambda invocation) while `redirect` keeps serving untouched. New accepted risk: a legitimate
-burst above a route's limit also gets 429'd — client backoff+jitter mitigates this for a
-conforming caller; a non-conforming one sees a hard failure instead of degraded success.
+**Failure-mode change**: before, every route shared one throttle bucket and Lambda concurrency
+pool — a spike anywhere could degrade everywhere. After, each route has its own token bucket, so
+an overloaded route gets 429'd cheaply instead of consuming shared capacity.
 
 **History**
-- Both the first post-redeploy `realistic.js` run and the first `stress.js` attempt were
-  discarded: redeploying `template.yaml` republishes new Lambda versions (shared jar rebuild
-  changes `CodeSha256` even with no code change), which resets SnapStart's warm-environment
-  pool — the same cold-restore pattern §2 already documented. A second `realistic.js` run,
-  seconds later, gave the clean "After" above. The first `stress.js` run also aborted at 8s on
-  `abortOnFail` from thin early-ramp samples (same known noise as §1/§2's early attempts) — not
-  a throttling result, just noise from a handful of samples early in the ramp.
-- The `stress.js` demonstration run below **is the backpressure evidence**, not the regression
-  check: `hot`/`cold` saw **zero** 429s through the full ramp to 400 req/s/scenario (`redirect`'s
-  40/80 limit held, since CloudFront still absorbed most of that traffic at the edge), while
-  `crud` — whose 400 req/s target instantly exceeds its 15-40 limits with no CloudFront caching
-  to soften it — got shed hard: 214,867 client-side 429s, `checks_succeeded` dropped to 65.7%
-  overall (create/list ~35% success, update/delete ~12%, all against their configured limits).
-  CloudWatch access logs corroborate independently: 213,111 origin 429s in the same window,
-  broken down `DELETE /v1/urls/{shortCode}`=55,340, `PATCH /v1/urls/{shortCode}`=55,271,
-  `GET /v1/urls`=51,113, `POST /v1/urls`=51,387 — and critically, **zero** rows for
-  `GET /v1/urls/{shortCode}` (redirect), matching k6's own count exactly.
-- Despite the heavy shedding, `crud`'s own `http_req_duration` p99 (475ms) stayed *under* the
-  SLO — a 429 is a fast rejection (no Lambda invocation), so individual request latency stays
-  low even as the retry backoff piles up in `iteration_duration` (p95 ≈ 7.85s) and many VUs
-  ultimately exhaust their 5 retry attempts. This is the shedding-vs-silent-capacity distinction
-  the ADR calls out: fast failure, not slow success.
+- Redeploying `template.yaml` republishes Lambda versions (shared jar rebuild), resetting
+  SnapStart's warm pool — first post-deploy runs were discarded as cold-start noise (same
+  pattern as §2); a second run seconds later gave the "After" above.
+- `stress.js` (ramp to 400 req/s/scenario) is the backpressure evidence: `redirect` saw **zero**
+  429s throughout, while `crud` absorbed 214,867 429s — CloudWatch confirms 213,111 origin 429s
+  in the same window, none on the redirect route.
 
-**Evidence**: CloudWatch Logs Insights against `/aws/apigateway/tylink-http-api-access-logs`,
-bounded to the stress run's window:
-```
-fields @timestamp, routeKey, status
-| filter status = "429"
-| stats count(*) as throttled by routeKey
-```
-
-**Verdict**: per-route isolation confirmed — `redirect` stayed fully protected (0 429s) while
-`crud` absorbed 100% of the shedding, proving independent token buckets rather than one shared
-ceiling. No regression at normal traffic.
+**Verdict**: no regression at normal traffic; per-route isolation confirmed under stress —
+`crud` gets shed hard (a 429 is a fast reject, so its own p99 stays under SLO even as retry
+backoff pushes iteration time up) while `redirect` stays fully protected.
 
 <details>
 <summary>Raw k6 summary — throttling before/after + stress demonstration</summary>
 
 BEFORE, warm (2026-08-20T09:32:33Z – 09:34:39Z):
 ```
-  █ THRESHOLDS
-    http_req_duration{scenario:cold}: ✓ p(99)=753.7ms
-    http_req_duration{scenario:crud}: ✓ p(99)=922.86ms
-    http_req_duration{scenario:hot}:  ✓ p(99)=30.33ms
-    throttled_responses{scenario:cold}: ✓ count=0
-    throttled_responses{scenario:crud}: ✓ count=0
-    throttled_responses{scenario:hot}:  ✓ count=0
-
-  http_req_duration..: avg=47.08ms  med=5.24ms   p(90)=36.36ms  p(95)=331.77ms
-    { scenario:cold }: avg=37.47ms  med=5.27ms   p(90)=36.24ms  p(95)=86.33ms
-    { scenario:crud }: avg=495.87ms med=366.19ms p(90)=852.66ms p(95)=879.36ms
-    { scenario:hot }:  avg=5.92ms   med=5.12ms   p(90)=6.41ms   p(95)=7.65ms
+  http_req_duration p99: cold=753.7ms crud=922.86ms hot=30.33ms
   checks_succeeded: 99.97% (3801/3802)
 ```
 
 AFTER, warm, throttle deployed (2026-08-20T09:41:02Z – 09:43:07Z):
 ```
-  █ THRESHOLDS
-    http_req_duration{scenario:cold}: ✓ p(99)=763.44ms
-    http_req_duration{scenario:crud}: ✓ p(99)=915.2ms
-    http_req_duration{scenario:hot}:  ✓ p(99)=8.85ms
-    throttled_responses{scenario:cold}: ✓ count=0
-    throttled_responses{scenario:crud}: ✓ count=0
-    throttled_responses{scenario:hot}:  ✓ count=0
-
-  http_req_duration..: avg=55.17ms  med=5.26ms   p(90)=14.35ms  p(95)=361.88ms
-    { scenario:cold }: avg=42.34ms  med=5.17ms   p(90)=7.43ms   p(95)=314.22ms
-    { scenario:crud }: avg=511.9ms  med=354.2ms  p(90)=832.28ms p(95)=865.47ms
-    { scenario:hot }:  avg=5.4ms    med=5.21ms   p(90)=6.22ms   p(95)=6.82ms
+  http_req_duration p99: cold=763.44ms crud=915.2ms hot=8.85ms
   checks_succeeded: 100.00% (3846/3846)
 ```
 
-STRESS demonstration, throttle deployed (2026-08-20T09:43:50Z – 09:48:22Z), full 4m30s ramp to
-400 req/s/scenario, no abort:
+STRESS demonstration (2026-08-20T09:43:50Z – 09:48:22Z), full 4m30s ramp to 400 req/s/scenario:
 ```
-  █ THRESHOLDS
-    http_req_duration{scenario:cold}: ✓ p(99)=335.31ms
-    http_req_duration{scenario:crud}: ✓ p(99)=475.43ms
-    http_req_duration{scenario:hot}:  ✓ p(99)=22.69ms
-    throttled_responses{scenario:cold}: ✓ count=0
-    throttled_responses{scenario:crud}: ✓ count=214867
-    throttled_responses{scenario:hot}:  ✓ count=0
-
-  checks_succeeded: 65.74% (79717/121246)
-    ✗ crud create status is 201 — 35% (4842/13665)
-    ✗ crud list status is 200   — 36% (4869/13661)
-    ✗ crud update status is 200 — 12% (1701/13661)
-    ✗ crud delete status is 410 — 12% (1707/13661)
-    ✓ hotRedirect / coldRedirect status is 307 — 100%
-
-  http_req_duration..: avg=209.14ms med=251.76ms p(90)=276.01ms p(95)=288.15ms
-    { scenario:cold }: avg=16.03ms  med=4.91ms   p(90)=7.56ms   p(95)=12.08ms
-    { scenario:crud }: avg=266.03ms med=254.72ms p(90)=278.9ms  p(95)=295.35ms
-    { scenario:hot }:  avg=5.69ms   med=4.67ms   p(90)=6.42ms   p(95)=8.98ms
-  iteration_duration.: avg=1.17s    med=5.11ms   p(90)=6.76s    p(95)=7.85s
-  vus_max............: 600  min=150  max=600
-  dropped_iterations.: 19633  72.42/s
+  http_req_duration p99: cold=335.31ms crud=475.43ms hot=22.69ms
+  throttled_responses: hot=0 cold=0 crud=214867
+  checks_succeeded: 65.74% (79717/121246) — crud create/list ~35%, update/delete ~12%
 ```
 </details>
 
@@ -415,46 +336,6 @@ TBD
 ```
 
 </details>
-
-## Bottleneck Analysis
-
-No hard capacity ceiling was found: `stress.js` sustained its full configured ramp (up to
-400 iters/s × 3 scenarios, ~769 req/s combined) without breaching the p99 SLO once past the
-noisy ramp-up window (see Capstone section — run suspended, reasoning below). Every latency
-issue found in this report traces to one root cause, not throughput capacity: **Lambda
-SnapStart's JVM/platform restore cost.**
-
-- **Baseline**: the account's default Lambda concurrency quota (10) queued/throttled requests —
-  a config limit, not a scaling limit. Fixed by raising the quota to 1000.
-- **SnapStart & CloudFront (§1, §2)**: every SnapStart-enabled function's tail latency is
-  dominated by its own restore cost (~1.0–1.05s, confirmed via CloudWatch `REPORT` lines),
-  triggered whenever traffic volume drops enough for Lambda to scale environments down between
-  bursts. CloudFront caching cuts how *often* the redirect path restores (removes ~78% of its
-  traffic), but doesn't remove the per-restore cost itself.
-- **DynamoDB**: zero throttling evidence in any run in this report — on-demand capacity absorbed
-  every burst tested. Not a constraint.
-- **Custom authorizer**: its own restore cost (~0.95–0.97s) is comparable to a backend
-  function's, not categorically worse. It only compounds latency when it stacks with a backend
-  function's own restore on the same request (shared routes).
-
-**Capstone stress-to-failure run suspended**: sustaining hundreds of req/s long enough to find a
-hard ceiling costs real money on on-demand DynamoDB, and the 810-short-code seed pool is too
-small to produce realistic (non-cache-skewed) traffic at that scale. Revisit only if a production
-capacity number is actually needed (see Beyond This Project).
-
-**Takeaway**: restore cost is structural (JVM startup under SnapStart), not something caching or
-backoff tuning removes — the fix is provisioned concurrency, not further capacity work.
-
-## Beyond This Project
-
-Next scaling steps not built here, per `docs/plans/03-load-testing.md` step 7:
-
-| Option | When it would actually be needed |
-|---|---|
-| DynamoDB Accelerator (DAX) | If a real per-request-side-effect / hot-key read problem remains after CloudFront caching |
-| DynamoDB Global Tables | Multi-region / DR — out of scope for a single-region deployment |
-| Provisioned concurrency (replacing SnapStart) | Confirmed needed, not just hypothetical — §1 shows SnapStart + connection-priming alone doesn't bound p99 under this project's burst load. AWS does not support SnapStart and provisioned concurrency together on the same version/alias, so this means switching off SnapStart on these functions, not adding PC alongside it — next step if this work continues |
-| True stress-to-failure capacity run (AWS Distributed Load Testing solution, expanded seed-data pool) | Only if a hard production capacity number is actually needed — this report's 810-short-code pool skews results toward cache hits at high sustained RPS, and on-demand DynamoDB bills per request regardless of the outcome |
 
 ## Appendix — Run Timestamp Windows
 
