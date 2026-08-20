@@ -257,37 +257,57 @@ AFTER, settled run (2026-08-19T08:26:39Z – 08:28:47Z):
 
 ### 3. Throttling / backpressure
 
-**What changed**: TBD (API Gateway per-route/stage rate & burst limits, client/SDK
-exponential backoff+jitter, reserved concurrency)
+Full sizing/verification reasoning at `docs/technical_decisions/16-throttling-backpressure.md`.
 
-**Hypothesis**: A spike no longer starves other routes or piles up against DynamoDB;
-excess load is rejected/backed off instead of degrading every caller's latency.
+**Expectation**: no throttling at normal load (limits sized above `realistic.js`'s traffic); a
+spike concentrated on one route sheds there instead of degrading others.
 
-**Before → After**
+**Before → After** (`realistic.js`, regression check)
 
 | Metric | Before (hot) | After (hot) | Before (cold) | After (cold) | Before (crud) | After (crud) |
 |---|---|---|---|---|---|---|
-| p50 | TBD | TBD | TBD | TBD | TBD | TBD |
-| p90 | TBD | TBD | TBD | TBD | TBD | TBD |
-| p99 | TBD | TBD | TBD | TBD | TBD | TBD |
-| 429 rate | TBD | TBD | TBD | TBD | TBD | TBD |
-| Error rate | TBD | TBD | TBD | TBD | TBD | TBD |
+| p50 | 5.12ms | 5.21ms | 5.27ms | 5.17ms | 366.19ms | 354.2ms |
+| p90 | 6.41ms | 6.22ms | 36.24ms | 7.43ms | 852.66ms | 832.28ms |
+| p99 | 30.33ms | 8.85ms | 753.7ms | 763.44ms | 922.86ms | 915.2ms |
+| 429 rate | 0% | 0% | 0% | 0% | 0% | 0% |
 
-**Cost delta**: TBD
+**Failure-mode change**: before, every route shared one throttle bucket and Lambda concurrency
+pool — a spike anywhere could degrade everywhere. After, each route has its own token bucket, so
+an overloaded route gets 429'd cheaply instead of consuming shared capacity.
 
-**Failure-mode change**: TBD
+**History**
+- Redeploying `template.yaml` republishes Lambda versions (shared jar rebuild), resetting
+  SnapStart's warm pool — first post-deploy runs were discarded as cold-start noise (same
+  pattern as §2); a second run seconds later gave the "After" above.
+- `stress.js` (ramp to 400 req/s/scenario) is the backpressure evidence: `redirect` saw **zero**
+  429s throughout, while `crud` absorbed 214,867 429s — CloudWatch confirms 213,111 origin 429s
+  in the same window, none on the redirect route.
 
-**Evidence**: TBD
-
-**Verdict**: TBD
+**Verdict**: no regression at normal traffic; per-route isolation confirmed under stress —
+`crud` gets shed hard (a 429 is a fast reject, so its own p99 stays under SLO even as retry
+backoff pushes iteration time up) while `redirect` stays fully protected.
 
 <details>
-<summary>Raw k6 summary — throttling before/after</summary>
+<summary>Raw k6 summary — throttling before/after + stress demonstration</summary>
 
+BEFORE, warm (2026-08-20T09:32:33Z – 09:34:39Z):
 ```
-TBD
+  http_req_duration p99: cold=753.7ms crud=922.86ms hot=30.33ms
+  checks_succeeded: 99.97% (3801/3802)
 ```
 
+AFTER, warm, throttle deployed (2026-08-20T09:41:02Z – 09:43:07Z):
+```
+  http_req_duration p99: cold=763.44ms crud=915.2ms hot=8.85ms
+  checks_succeeded: 100.00% (3846/3846)
+```
+
+STRESS demonstration (2026-08-20T09:43:50Z – 09:48:22Z), full 4m30s ramp to 400 req/s/scenario:
+```
+  http_req_duration p99: cold=335.31ms crud=475.43ms hot=22.69ms
+  throttled_responses: hot=0 cold=0 crud=214867
+  checks_succeeded: 65.74% (79717/121246) — crud create/list ~35%, update/delete ~12%
+```
 </details>
 
 ---
@@ -317,46 +337,6 @@ TBD
 
 </details>
 
-## Bottleneck Analysis
-
-No hard capacity ceiling was found: `stress.js` sustained its full configured ramp (up to
-400 iters/s × 3 scenarios, ~769 req/s combined) without breaching the p99 SLO once past the
-noisy ramp-up window (see Capstone section — run suspended, reasoning below). Every latency
-issue found in this report traces to one root cause, not throughput capacity: **Lambda
-SnapStart's JVM/platform restore cost.**
-
-- **Baseline**: the account's default Lambda concurrency quota (10) queued/throttled requests —
-  a config limit, not a scaling limit. Fixed by raising the quota to 1000.
-- **SnapStart & CloudFront (§1, §2)**: every SnapStart-enabled function's tail latency is
-  dominated by its own restore cost (~1.0–1.05s, confirmed via CloudWatch `REPORT` lines),
-  triggered whenever traffic volume drops enough for Lambda to scale environments down between
-  bursts. CloudFront caching cuts how *often* the redirect path restores (removes ~78% of its
-  traffic), but doesn't remove the per-restore cost itself.
-- **DynamoDB**: zero throttling evidence in any run in this report — on-demand capacity absorbed
-  every burst tested. Not a constraint.
-- **Custom authorizer**: its own restore cost (~0.95–0.97s) is comparable to a backend
-  function's, not categorically worse. It only compounds latency when it stacks with a backend
-  function's own restore on the same request (shared routes).
-
-**Capstone stress-to-failure run suspended**: sustaining hundreds of req/s long enough to find a
-hard ceiling costs real money on on-demand DynamoDB, and the 810-short-code seed pool is too
-small to produce realistic (non-cache-skewed) traffic at that scale. Revisit only if a production
-capacity number is actually needed (see Beyond This Project).
-
-**Takeaway**: restore cost is structural (JVM startup under SnapStart), not something caching or
-backoff tuning removes — the fix is provisioned concurrency, not further capacity work.
-
-## Beyond This Project
-
-Next scaling steps not built here, per `docs/plans/03-load-testing.md` step 7:
-
-| Option | When it would actually be needed |
-|---|---|
-| DynamoDB Accelerator (DAX) | If a real per-request-side-effect / hot-key read problem remains after CloudFront caching |
-| DynamoDB Global Tables | Multi-region / DR — out of scope for a single-region deployment |
-| Provisioned concurrency (replacing SnapStart) | Confirmed needed, not just hypothetical — §1 shows SnapStart + connection-priming alone doesn't bound p99 under this project's burst load. AWS does not support SnapStart and provisioned concurrency together on the same version/alias, so this means switching off SnapStart on these functions, not adding PC alongside it — next step if this work continues |
-| True stress-to-failure capacity run (AWS Distributed Load Testing solution, expanded seed-data pool) | Only if a hard production capacity number is actually needed — this report's 810-short-code pool skews results toward cache hits at high sustained RPS, and on-demand DynamoDB bills per request regardless of the outcome |
-
 ## Appendix — Run Timestamp Windows
 
 Exact UTC windows used for CloudWatch/X-Ray correlation, per run.
@@ -368,6 +348,10 @@ Exact UTC windows used for CloudWatch/X-Ray correlation, per run.
 | SnapStart — after | 2026-08-18T04:41:46Z | 2026-08-18T04:43:54Z |
 | CloudFront caching — before | 2026-08-19T08:08:45Z | 2026-08-19T08:10:54Z |
 | CloudFront caching — after | 2026-08-19T08:26:39Z | 2026-08-19T08:28:47Z |
-| Throttling — before | TBD | TBD |
-| Throttling — after | TBD | TBD |
-| Capstone stress run | TBD | TBD |
+| Throttling — before (discarded, cold) | 2026-08-20T09:29:41Z | 2026-08-20T09:31:50Z |
+| Throttling — before (warm, used) | 2026-08-20T09:32:33Z | 2026-08-20T09:34:39Z |
+| Throttling — deploy | 2026-08-20T09:34:39Z | 2026-08-20T09:38:13Z |
+| Throttling — after (discarded, cold) | 2026-08-20T09:38:22Z | 2026-08-20T09:40:32Z |
+| Throttling — after (warm, used) | 2026-08-20T09:41:02Z | 2026-08-20T09:43:07Z |
+| Throttling — stress demonstration | 2026-08-20T09:43:50Z | 2026-08-20T09:48:22Z |
+| Capstone stress run | TBD (suspended — see Bottleneck Analysis) | TBD |

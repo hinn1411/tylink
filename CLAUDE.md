@@ -124,3 +124,9 @@ via `-Pintegration-test` (`docs/technical_decisions/07-integration-tests-as-prof
 ### Document generation
 - Documents should precise, straight to the point
 - No filler, no vague meaning, no redundant words. It is for engineers.
+
+### Chat responses
+- Keep replies short: 1-3 sentences stating what changed and what's next, nothing else.
+- No preamble ("I'll now...", "Let me..."), no restating the request, no step-by-step narration
+  of tool calls already visible, no trailing recap of work already shown in the output.
+- Skip a section unless it's TBD or wrong; don't re-summarize sections that didn't change.

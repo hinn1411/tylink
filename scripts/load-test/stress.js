@@ -60,6 +60,10 @@ export const options = {
     'http_req_duration{scenario:hot}': [{ threshold: 'p(99)<1000', abortOnFail: true }],
     'http_req_duration{scenario:cold}': [{ threshold: 'p(99)<1000', abortOnFail: true }],
     'http_req_duration{scenario:crud}': [{ threshold: 'p(99)<1000', abortOnFail: true }],
+    // Non-failing — only here to force a per-scenario 429 breakdown into the summary.
+    'throttled_responses{scenario:hot}': [{ threshold: 'count>=0', abortOnFail: false }],
+    'throttled_responses{scenario:cold}': [{ threshold: 'count>=0', abortOnFail: false }],
+    'throttled_responses{scenario:crud}': [{ threshold: 'count>=0', abortOnFail: false }],
   },
 };
 

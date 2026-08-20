@@ -157,6 +157,30 @@ Resources:
           "errorMessage":"$context.error.message",
           "responseLatency":"$context.responseLatency",
           "integrationLatency":"$context.integration.latency"}
+      # Per-route token-bucket rate/burst limits, sized off ORIGIN traffic (post-CloudFront-
+      # cache), not viewer/edge traffic — see docs/technical_decisions/16-throttling-backpressure.md.
+      RouteSettings:
+        "GET /v1/urls/{shortCode}":     # RedirectUrl — shared by hot+cold k6 scenarios
+          ThrottlingRateLimit: 40
+          ThrottlingBurstLimit: 80
+        "POST /v1/urls":                # ShortenUrl (create)
+          ThrottlingRateLimit: 20
+          ThrottlingBurstLimit: 40
+        "GET /v1/urls":                 # ListUrls
+          ThrottlingRateLimit: 20
+          ThrottlingBurstLimit: 40
+        "PATCH /v1/urls/{shortCode}":   # UpdateUrl
+          ThrottlingRateLimit: 15
+          ThrottlingBurstLimit: 30
+        "DELETE /v1/urls/{shortCode}":  # DeleteUrl
+          ThrottlingRateLimit: 15
+          ThrottlingBurstLimit: 30
+        "POST /v1/auth/login":          # only hit once per k6 run (setup()) — baseline, not load-derived
+          ThrottlingRateLimit: 10
+          ThrottlingBurstLimit: 20
+      DefaultRouteSettings:             # safety net for any future route added without explicit sizing
+        ThrottlingRateLimit: 10
+        ThrottlingBurstLimit: 20
       Auth:
         Authorizers:
           # Allow all traffic, only extract token
