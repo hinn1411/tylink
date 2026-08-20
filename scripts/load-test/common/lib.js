@@ -6,30 +6,42 @@ import { SharedArray } from 'k6/data';
 const RETRY_BASE_DELAY_MS = 100;
 const RETRY_MAX_DELAY_MS = 2000;
 const RETRY_MAX_ATTEMPTS = 5; // 1 initial + 4 retries
+const RETRY_DEADLINE_MS = 5000;
 
-// Surfaces a per-scenario 429 count in k6's own summary without post-processing raw JSON.
 export const throttledResponses = new Counter('throttled_responses');
 
-// Retries only on 429 (API-Gateway route throttle — no handler in this codebase ever returns
-// 429 itself, so it's unambiguous). Full-jitter exponential backoff:
-// sleep = random(0, min(cap, base*2^n)). Every other status — including expected app-level
-// ones like 410/404 — returns immediately, untouched.
 function requestWithRetry(makeRequest, tags) {
+  const startTime = Date.now();
   let attempt = 0;
   let result;
-  for (;;) {
+  let canRetry;
+  do {
     result = makeRequest();
     if (result.status === 429) {
       throttledResponses.add(1, tags);
     }
-    if (result.status !== 429 || attempt >= RETRY_MAX_ATTEMPTS - 1) {
-      return result;
+    canRetry = shouldRetry(result.status, attempt, startTime);
+    if (canRetry) {
+      const backoffDelay = RETRY_BASE_DELAY_MS * 2 ** attempt
+      const cappedDelay = Math.min(RETRY_MAX_DELAY_MS, backoffDelay);
+      const jitter = (Math.random() * cappedDelay) / 1000
+      sleep(jitter);
+      attempt++;
     }
-    const cappedDelayMs = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** attempt);
-    sleep((Math.random() * cappedDelayMs) / 1000);
-    attempt++;
-  }
+  } while (canRetry);
+  return result;
 }
+
+function shouldRetry(status, attempt, startTime) {
+  return isRetryableStatus(status)
+    && attempt < RETRY_MAX_ATTEMPTS - 1
+    && Date.now() - startTime < RETRY_DEADLINE_MS;
+}
+
+function isRetryableStatus(status) {
+  return status === 429 || status >= 500;
+}
+
 
 export const BASE_URL = (__ENV.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
 
