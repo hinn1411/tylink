@@ -257,37 +257,136 @@ AFTER, settled run (2026-08-19T08:26:39Z – 08:28:47Z):
 
 ### 3. Throttling / backpressure
 
-**What changed**: TBD (API Gateway per-route/stage rate & burst limits, client/SDK
-exponential backoff+jitter, reserved concurrency)
+Full sizing/verification reasoning at `docs/technical_decisions/16-throttling-backpressure.md`.
 
-**Hypothesis**: A spike no longer starves other routes or piles up against DynamoDB;
-excess load is rejected/backed off instead of degrading every caller's latency.
+**What changed**: per-route API Gateway `RouteSettings` (redirect 40/80 rate/burst; create/list
+20/40; update/delete 15/30; login 10/20) plus a `requestWithRetry` full-jitter backoff helper in
+the k6 harness (429-only, 5 attempts).
 
-**Before → After**
+**Hypothesis**: a spike no longer starves other routes sharing Lambda concurrency; excess load is
+rejected at API Gateway instead of degrading every caller's latency.
+
+**Before → After** (`realistic.js`, regression check — no throttle should ever engage at normal
+traffic)
 
 | Metric | Before (hot) | After (hot) | Before (cold) | After (cold) | Before (crud) | After (crud) |
 |---|---|---|---|---|---|---|
-| p50 | TBD | TBD | TBD | TBD | TBD | TBD |
-| p90 | TBD | TBD | TBD | TBD | TBD | TBD |
-| p99 | TBD | TBD | TBD | TBD | TBD | TBD |
-| 429 rate | TBD | TBD | TBD | TBD | TBD | TBD |
-| Error rate | TBD | TBD | TBD | TBD | TBD | TBD |
+| p50 | 5.12ms | 5.21ms | 5.27ms | 5.17ms | 366.19ms | 354.2ms |
+| p90 | 6.41ms | 6.22ms | 36.24ms | 7.43ms | 852.66ms | 832.28ms |
+| p99 | 30.33ms | 8.85ms | 753.7ms | 763.44ms | 922.86ms | 915.2ms |
+| 429 rate | 0% | 0% | 0% | 0% | 0% | 0% |
+| Error rate (checks_failed) | 0.03% | 0.00% | 0.03% | 0.00% | 0.03% | 0.00% |
 
-**Cost delta**: TBD
+All within noise of each other — confirms the throttle never engages under normal load, as sized.
 
-**Failure-mode change**: TBD
+**Cost delta**: ~$0 — route throttling is a built-in API Gateway stage feature.
 
-**Evidence**: TBD
+**Failure-mode change**: before, all routes shared one account-level throttle bucket and one
+Lambda concurrency pool — a spike anywhere could degrade everywhere. After, each route has an
+independent token bucket: confirmed below, a `crud` spike gets 429'd cheaply at API Gateway
+(no Lambda invocation) while `redirect` keeps serving untouched. New accepted risk: a legitimate
+burst above a route's limit also gets 429'd — client backoff+jitter mitigates this for a
+conforming caller; a non-conforming one sees a hard failure instead of degraded success.
 
-**Verdict**: TBD
+**History**
+- Both the first post-redeploy `realistic.js` run and the first `stress.js` attempt were
+  discarded: redeploying `template.yaml` republishes new Lambda versions (shared jar rebuild
+  changes `CodeSha256` even with no code change), which resets SnapStart's warm-environment
+  pool — the same cold-restore pattern §2 already documented. A second `realistic.js` run,
+  seconds later, gave the clean "After" above. The first `stress.js` run also aborted at 8s on
+  `abortOnFail` from thin early-ramp samples (same known noise as §1/§2's early attempts) — not
+  a throttling result, just noise from a handful of samples early in the ramp.
+- The `stress.js` demonstration run below **is the backpressure evidence**, not the regression
+  check: `hot`/`cold` saw **zero** 429s through the full ramp to 400 req/s/scenario (`redirect`'s
+  40/80 limit held, since CloudFront still absorbed most of that traffic at the edge), while
+  `crud` — whose 400 req/s target instantly exceeds its 15-40 limits with no CloudFront caching
+  to soften it — got shed hard: 214,867 client-side 429s, `checks_succeeded` dropped to 65.7%
+  overall (create/list ~35% success, update/delete ~12%, all against their configured limits).
+  CloudWatch access logs corroborate independently: 213,111 origin 429s in the same window,
+  broken down `DELETE /v1/urls/{shortCode}`=55,340, `PATCH /v1/urls/{shortCode}`=55,271,
+  `GET /v1/urls`=51,113, `POST /v1/urls`=51,387 — and critically, **zero** rows for
+  `GET /v1/urls/{shortCode}` (redirect), matching k6's own count exactly.
+- Despite the heavy shedding, `crud`'s own `http_req_duration` p99 (475ms) stayed *under* the
+  SLO — a 429 is a fast rejection (no Lambda invocation), so individual request latency stays
+  low even as the retry backoff piles up in `iteration_duration` (p95 ≈ 7.85s) and many VUs
+  ultimately exhaust their 5 retry attempts. This is the shedding-vs-silent-capacity distinction
+  the ADR calls out: fast failure, not slow success.
+
+**Evidence**: CloudWatch Logs Insights against `/aws/apigateway/tylink-http-api-access-logs`,
+bounded to the stress run's window:
+```
+fields @timestamp, routeKey, status
+| filter status = "429"
+| stats count(*) as throttled by routeKey
+```
+
+**Verdict**: per-route isolation confirmed — `redirect` stayed fully protected (0 429s) while
+`crud` absorbed 100% of the shedding, proving independent token buckets rather than one shared
+ceiling. No regression at normal traffic.
 
 <details>
-<summary>Raw k6 summary — throttling before/after</summary>
+<summary>Raw k6 summary — throttling before/after + stress demonstration</summary>
 
+BEFORE, warm (2026-08-20T09:32:33Z – 09:34:39Z):
 ```
-TBD
+  █ THRESHOLDS
+    http_req_duration{scenario:cold}: ✓ p(99)=753.7ms
+    http_req_duration{scenario:crud}: ✓ p(99)=922.86ms
+    http_req_duration{scenario:hot}:  ✓ p(99)=30.33ms
+    throttled_responses{scenario:cold}: ✓ count=0
+    throttled_responses{scenario:crud}: ✓ count=0
+    throttled_responses{scenario:hot}:  ✓ count=0
+
+  http_req_duration..: avg=47.08ms  med=5.24ms   p(90)=36.36ms  p(95)=331.77ms
+    { scenario:cold }: avg=37.47ms  med=5.27ms   p(90)=36.24ms  p(95)=86.33ms
+    { scenario:crud }: avg=495.87ms med=366.19ms p(90)=852.66ms p(95)=879.36ms
+    { scenario:hot }:  avg=5.92ms   med=5.12ms   p(90)=6.41ms   p(95)=7.65ms
+  checks_succeeded: 99.97% (3801/3802)
 ```
 
+AFTER, warm, throttle deployed (2026-08-20T09:41:02Z – 09:43:07Z):
+```
+  █ THRESHOLDS
+    http_req_duration{scenario:cold}: ✓ p(99)=763.44ms
+    http_req_duration{scenario:crud}: ✓ p(99)=915.2ms
+    http_req_duration{scenario:hot}:  ✓ p(99)=8.85ms
+    throttled_responses{scenario:cold}: ✓ count=0
+    throttled_responses{scenario:crud}: ✓ count=0
+    throttled_responses{scenario:hot}:  ✓ count=0
+
+  http_req_duration..: avg=55.17ms  med=5.26ms   p(90)=14.35ms  p(95)=361.88ms
+    { scenario:cold }: avg=42.34ms  med=5.17ms   p(90)=7.43ms   p(95)=314.22ms
+    { scenario:crud }: avg=511.9ms  med=354.2ms  p(90)=832.28ms p(95)=865.47ms
+    { scenario:hot }:  avg=5.4ms    med=5.21ms   p(90)=6.22ms   p(95)=6.82ms
+  checks_succeeded: 100.00% (3846/3846)
+```
+
+STRESS demonstration, throttle deployed (2026-08-20T09:43:50Z – 09:48:22Z), full 4m30s ramp to
+400 req/s/scenario, no abort:
+```
+  █ THRESHOLDS
+    http_req_duration{scenario:cold}: ✓ p(99)=335.31ms
+    http_req_duration{scenario:crud}: ✓ p(99)=475.43ms
+    http_req_duration{scenario:hot}:  ✓ p(99)=22.69ms
+    throttled_responses{scenario:cold}: ✓ count=0
+    throttled_responses{scenario:crud}: ✓ count=214867
+    throttled_responses{scenario:hot}:  ✓ count=0
+
+  checks_succeeded: 65.74% (79717/121246)
+    ✗ crud create status is 201 — 35% (4842/13665)
+    ✗ crud list status is 200   — 36% (4869/13661)
+    ✗ crud update status is 200 — 12% (1701/13661)
+    ✗ crud delete status is 410 — 12% (1707/13661)
+    ✓ hotRedirect / coldRedirect status is 307 — 100%
+
+  http_req_duration..: avg=209.14ms med=251.76ms p(90)=276.01ms p(95)=288.15ms
+    { scenario:cold }: avg=16.03ms  med=4.91ms   p(90)=7.56ms   p(95)=12.08ms
+    { scenario:crud }: avg=266.03ms med=254.72ms p(90)=278.9ms  p(95)=295.35ms
+    { scenario:hot }:  avg=5.69ms   med=4.67ms   p(90)=6.42ms   p(95)=8.98ms
+  iteration_duration.: avg=1.17s    med=5.11ms   p(90)=6.76s    p(95)=7.85s
+  vus_max............: 600  min=150  max=600
+  dropped_iterations.: 19633  72.42/s
+```
 </details>
 
 ---
@@ -368,6 +467,10 @@ Exact UTC windows used for CloudWatch/X-Ray correlation, per run.
 | SnapStart — after | 2026-08-18T04:41:46Z | 2026-08-18T04:43:54Z |
 | CloudFront caching — before | 2026-08-19T08:08:45Z | 2026-08-19T08:10:54Z |
 | CloudFront caching — after | 2026-08-19T08:26:39Z | 2026-08-19T08:28:47Z |
-| Throttling — before | TBD | TBD |
-| Throttling — after | TBD | TBD |
-| Capstone stress run | TBD | TBD |
+| Throttling — before (discarded, cold) | 2026-08-20T09:29:41Z | 2026-08-20T09:31:50Z |
+| Throttling — before (warm, used) | 2026-08-20T09:32:33Z | 2026-08-20T09:34:39Z |
+| Throttling — deploy | 2026-08-20T09:34:39Z | 2026-08-20T09:38:13Z |
+| Throttling — after (discarded, cold) | 2026-08-20T09:38:22Z | 2026-08-20T09:40:32Z |
+| Throttling — after (warm, used) | 2026-08-20T09:41:02Z | 2026-08-20T09:43:07Z |
+| Throttling — stress demonstration | 2026-08-20T09:43:50Z | 2026-08-20T09:48:22Z |
+| Capstone stress run | TBD (suspended — see Bottleneck Analysis) | TBD |
