@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Builds and starts the API locally, applying env.json so functions get real deployed
-# config values (e.g. Cognito IDs) instead of broken local defaults.
-# Set SKIP_BUILD=1 to skip the build step on repeat runs where only template.yaml changed.
+# Builds and starts the API locally, applying env.json for real deployed config values
+# (e.g. Cognito IDs). Set SKIP_BUILD=1 to skip the build step on repeat runs.
 set -euo pipefail
 
 PORT="${PORT:-3000}"

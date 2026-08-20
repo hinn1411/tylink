@@ -99,8 +99,7 @@ function createUrl(data) {
     longUrl: 'http://mock.com.vn',
     visibility: 'PRIVATE',
   });
-  // Generated once, outside the retry closure, so retries of one logical create reuse the same
-  // key — see docs/technical_decisions/16-throttling-backpressure.md.
+  // Reused across retries of this create (docs/technical_decisions/16-throttling-backpressure.md).
   const idempotencyKey = crypto.randomUUID();
   const result = requestWithRetry(() => http.post(`${BASE_URL}/v1/urls`, body, {
     headers: {

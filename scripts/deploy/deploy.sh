@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Deploys the stack. Pulls the Google OAuth client secret from SSM and prompts for
-# ALERT_EMAIL if not already set (pass it as an env var to skip the prompt, e.g. in CI).
-# Extra args (e.g. --guided) pass straight through to `sam deploy`.
+# ALERT_EMAIL if not already set. Extra args pass straight through to `sam deploy`.
 set -euo pipefail
 
 GOOGLE_CLIENT_SECRET_PARAM="${GOOGLE_CLIENT_SECRET_PARAM:-/tylink/google-oauth-client-secret}"

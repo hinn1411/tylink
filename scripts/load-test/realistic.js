@@ -6,8 +6,7 @@ import {
   crudLifecycle,
 } from './common/lib.js';
 
-// Realistic traffic profile (docs/plans/03-testing.md step 1): steady load against the
-// SLO, reporting pass/fail without stopping early.
+// Realistic traffic profile (docs/plans/03-testing.md step 1): steady load against the SLO.
 export const options = {
   scenarios: {
     hot_key_redirect: {
@@ -41,7 +40,7 @@ export const options = {
     'http_req_duration{scenario:hot}': ['p(99)<1000'],
     'http_req_duration{scenario:cold}': ['p(99)<1000'],
     'http_req_duration{scenario:crud}': ['p(99)<1000'],
-    // Non-failing — only here to force a per-scenario 429 breakdown into the summary.
+    // Non-failing; reports per-scenario 429 counts in the summary.
     'throttled_responses{scenario:hot}': [{ threshold: 'count>=0', abortOnFail: false }],
     'throttled_responses{scenario:cold}': [{ threshold: 'count>=0', abortOnFail: false }],
     'throttled_responses{scenario:crud}': [{ threshold: 'count>=0', abortOnFail: false }],

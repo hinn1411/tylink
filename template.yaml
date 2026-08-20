@@ -30,15 +30,13 @@ Parameters:
     Type: String
     NoEcho: true
     Description: >
-      Google OAuth client secret. CF can't resolve an ssm-secure dynamic reference for
-      AWS::Cognito::UserPoolIdentityProvider
+      Google OAuth client secret for the Cognito identity provider.
 
   AlertEmail:
     Type: String
     Description: >
-      Email address to receive CloudWatch Alarm notifications via SNS. Not stored in
-      samconfig.toml (git-tracked) — same reasoning as GoogleClientSecret — pass at deploy time
-      via scripts/deploy/deploy.sh's ALERT_EMAIL env var.
+      Email address to receive CloudWatch Alarm notifications via SNS. Pass at deploy time via
+      scripts/deploy/deploy.sh's ALERT_EMAIL env var.
 
 Resources:
   UserPool:
@@ -157,10 +155,10 @@ Resources:
           "errorMessage":"$context.error.message",
           "responseLatency":"$context.responseLatency",
           "integrationLatency":"$context.integration.latency"}
-      # Per-route token-bucket rate/burst limits, sized off ORIGIN traffic (post-CloudFront-
-      # cache), not viewer/edge traffic — see docs/technical_decisions/16-throttling-backpressure.md.
+      # Per-route rate/burst throttling limits — see
+      # docs/technical_decisions/16-throttling-backpressure.md.
       RouteSettings:
-        "GET /v1/urls/{shortCode}":     # RedirectUrl — shared by hot+cold k6 scenarios
+        "GET /v1/urls/{shortCode}":     # RedirectUrl
           ThrottlingRateLimit: 40
           ThrottlingBurstLimit: 80
         "POST /v1/urls":                # ShortenUrl (create)
@@ -175,10 +173,10 @@ Resources:
         "DELETE /v1/urls/{shortCode}":  # DeleteUrl
           ThrottlingRateLimit: 15
           ThrottlingBurstLimit: 30
-        "POST /v1/auth/login":          # only hit once per k6 run (setup()) — baseline, not load-derived
+        "POST /v1/auth/login":          # Login
           ThrottlingRateLimit: 10
           ThrottlingBurstLimit: 20
-      DefaultRouteSettings:             # safety net for any future route added without explicit sizing
+      DefaultRouteSettings:             # Fallback for routes not listed above
         ThrottlingRateLimit: 10
         ThrottlingBurstLimit: 20
       Auth:
@@ -188,8 +186,7 @@ Resources:
             FunctionArn: !Ref ExtractTokenAuthorizerFunction.Alias
             AuthorizerPayloadFormatVersion: "2.0"
             EnableSimpleResponses: true
-            # Ensures this authorizer runs unconditionally on every request, including
-            # anonymous ones.
+            # Runs unconditionally on every request, including anonymous ones.
             Identity:
               Context:
                 - routeKey
@@ -311,8 +308,8 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref UrlTable
-          # Only used when the short code is PUBLIC + ACTIVE — see RedirectUrlHandler and
-          # docs/technical_decisions/15-cloudfront-edge-caching.md.
+          # Only used when the short code is PUBLIC + ACTIVE (see
+          # docs/technical_decisions/15-cloudfront-edge-caching.md).
           TIME_TO_LIVE: "300"
       Policies:
         - DynamoDBReadPolicy:

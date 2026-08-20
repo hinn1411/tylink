@@ -3,14 +3,10 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   Nested stack: CloudWatch dashboards for tylink — Lambda Duration percentiles, the custom EMF
   metrics (ColdStart, IdempotencyMiss, ShortCodeCollisionRetries), and per-function TylinkResultCode
-  counts. Split out of template.yaml since all three dashboards only read function names and
-  nothing reads back from them — the clean, one-directional case for a nested stack. See
-  docs/technical_decisions/11-emf-metrics.md and docs/technical_decisions/12-result-codes.md.
+  counts. See docs/technical_decisions/11-emf-metrics.md and docs/technical_decisions/12-result-codes.md.
 
 Parameters:
-  # Not AWS::StackName: inside a nested stack that pseudo-parameter resolves to the nested
-  # stack's own auto-generated name (e.g. tylink-DashboardStack-XYZ), not "tylink" — passed down
-  # explicitly from the root template so DashboardName stays stable.
+  # AWS::StackName resolves to this nested stack's own name, not the root's.
   RootStackName:
     Type: String
   ShortenUrlFunctionName:
@@ -29,10 +25,8 @@ Parameters:
     Type: String
 
 Resources:
-  # Duration percentile widgets for every declared Lambda — CloudWatch's built-in Lambda
-  # monitoring graphs only show Average/Maximum by default; percentile statistics (p50/p90/p95/
-  # p99) need an explicit dashboard widget even though Duration itself needs no extra
-  # instrumentation. See docs/plans/02-scaling.md step 2.
+  # Duration percentile widgets (p50/p90/p95/p99) for every declared Lambda. See
+  # docs/plans/02-scaling.md step 2.
   LambdaDurationDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
@@ -156,7 +150,7 @@ Resources:
         }
 
   # Dashboard for the custom EMF metrics (tylink namespace). See
-  # docs/technical_decisions/11-emf-metrics.md for what each metric means and why.
+  # docs/technical_decisions/11-emf-metrics.md.
   CustomMetricsDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
@@ -214,13 +208,7 @@ Resources:
           ]
         }
 
-  # Result-code counts per function (tylink/RequestResult, "FunctionName"+"ResultCode"
-  # dimensions). One graph per Lambda; each graph is a single SEARCH() expression scoped to
-  # that function's metrics, so a new TylinkResultCode shows up automatically the first time
-  # it's emitted — no dashboard redeploy needed when the enum changes. Legend labels use
-  # CloudWatch Dynamic Labels (${!PROP('Dim.ResultCode')}, escaped so Fn::Sub leaves it for
-  # CloudWatch to resolve, not CloudFormation) to show the bare ResultCode name per series.
-  # Counts only, no derived rate math, no alarms (deferred).
+  # Result-code counts per function (tylink/RequestResult metric). One graph per Lambda.
   ResultCodeDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
