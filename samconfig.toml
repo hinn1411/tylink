@@ -16,6 +16,7 @@ lint = true
 capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
 confirm_changeset = true
 resolve_s3 = true
+tags = "project=tylink"
 
 [default.package.parameters]
 resolve_s3 = true
